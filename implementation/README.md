@@ -8,7 +8,7 @@ This folder contains a minimal buildable starting point, not the finished applic
 cd implementation/backend
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install -e .
 uvicorn forge.main:app --host 127.0.0.1 --port 9147 --reload
 ```
 
@@ -24,6 +24,7 @@ Make sure Ollama is running and a model exists.
 
 ```bash
 curl -X POST http://127.0.0.1:9147/api/v1/chat \
+  -H "Authorization: Bearer $(cat ~/.forge/auth.key)" \
   -H 'Content-Type: application/json' \
-  -d '{"message":"Say Forge is online."}'
+  -d '{"messages":[{"role":"user","content":"Say Forge is online."}]}'
 ```
