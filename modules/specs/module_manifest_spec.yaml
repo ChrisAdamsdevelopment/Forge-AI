@@ -1,0 +1,69 @@
+module_manifest_version: "0.1.0"
+
+required_fields:
+  id:
+    type: string
+    description: Stable reverse-domain or slug id.
+  name:
+    type: string
+    description: Human-readable module name.
+  version:
+    type: string
+    description: Semantic version.
+  author:
+    type: string
+    description: Module creator.
+  description:
+    type: string
+    description: Short purpose statement.
+  category:
+    type: string
+    allowed:
+      - research
+      - coding
+      - file_ops
+      - media
+      - security
+      - writing
+      - monitoring
+      - utility
+  entrypoint:
+    type: string
+    description: Path to primary prompt or workflow file.
+  input_schema:
+    type: string
+    description: Path to JSON schema for input.
+  output_schema:
+    type: string
+    description: Path to JSON schema for output.
+  permissions:
+    type: object
+    description: Tools, roots, network, terminal, browser, and approval requirements.
+  safety:
+    type: object
+    description: Destructive behavior, secret access, and import trust rules.
+
+example:
+  id: "forge.modules.repo_inspector"
+  name: "Repo Inspector"
+  version: "0.1.0"
+  author: "Forge"
+  description: "Analyze a repository and produce an implementation-risk report."
+  category: "coding"
+  entrypoint: "prompts/main.md"
+  input_schema: "schemas/input.schema.json"
+  output_schema: "schemas/output.schema.json"
+  permissions:
+    tools:
+      - "filesystem.read"
+      - "git.status"
+      - "terminal.execute"
+    roots:
+      - "workspace"
+    network: false
+    terminal: "approval_required"
+  safety:
+    destructive_actions: false
+    reads_secrets: false
+    approval_required:
+      - "terminal.execute"

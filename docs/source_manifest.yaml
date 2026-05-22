@@ -1,0 +1,49 @@
+project: Forge
+version: 0.1.0
+purpose: Source manifest for project RAG and planning context.
+
+source_sets:
+  core_project_docs:
+    include:
+      - docs/project_brief.md
+      - docs/architecture_overview.md
+      - docs/architecture_layers.md
+      - docs/app_framework_decisions.md
+      - docs/tasker_style_module_system.md
+      - docs/operating_rules.md
+      - docs/file_roots.md
+      - docs/rag_policy.md
+      - docs/security_model.md
+      - docs/roadmap.md
+    upload_to_rag: true
+
+  prompts:
+    include:
+      - prompts/project_prime_prompt.md
+      - prompts/system_prompt.md
+      - prompts/routing_prompt.md
+      - prompts/critique_prompt.md
+    upload_to_rag: mixed
+    notes: system_prompt.md is for runtime; project_prime_prompt.md is for initializing a planning chat.
+
+  module_specs:
+    include:
+      - modules/specs/module_architecture.md
+      - modules/specs/module_manifest_spec.yaml
+      - modules/specs/module_safety_contract.md
+      - modules/specs/module_marketplace_model.md
+    upload_to_rag: true
+
+  runtime_configs:
+    include:
+      - runtime/Modelfile
+      - runtime/mcp.json
+      - runtime/docker-compose.yaml
+      - runtime/.env.example
+    upload_to_rag: false
+
+  implementation_scaffold:
+    include:
+      - implementation/**
+    upload_to_rag: false
+    notes: Use as code seed, not general knowledge source.

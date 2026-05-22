@@ -1,0 +1,22 @@
+id: "forge.modules.research_dossier"
+name: "Research Dossier"
+version: "0.1.0"
+author: "Forge"
+description: "Research a topic, compare sources, and produce a structured dossier."
+category: "research"
+entrypoint: "prompts/main.md"
+input_schema: "schemas/input.schema.json"
+output_schema: "schemas/output.schema.json"
+permissions:
+  tools:
+    - "web.search"
+    - "web.fetch"
+    - "filesystem.write"
+  roots:
+    - "output"
+  network: true
+  terminal: false
+safety:
+  destructive_actions: false
+  reads_secrets: false
+  approval_required: []

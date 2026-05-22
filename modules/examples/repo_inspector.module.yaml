@@ -1,0 +1,24 @@
+id: "forge.modules.repo_inspector"
+name: "Repo Inspector"
+version: "0.1.0"
+author: "Forge"
+description: "Analyze a repository and produce a risk-ranked implementation report."
+category: "coding"
+entrypoint: "prompts/main.md"
+input_schema: "schemas/input.schema.json"
+output_schema: "schemas/output.schema.json"
+permissions:
+  tools:
+    - "filesystem.read"
+    - "git.status"
+    - "git.diff"
+    - "terminal.execute"
+  roots:
+    - "workspace"
+  network: false
+  terminal: "approval_required"
+safety:
+  destructive_actions: false
+  reads_secrets: false
+  approval_required:
+    - "terminal.execute"

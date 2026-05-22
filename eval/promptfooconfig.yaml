@@ -1,0 +1,24 @@
+description: Forge prompt and behavior regression seed
+
+prompts:
+  - file://../prompts/system_prompt.md
+
+providers:
+  - id: http
+    config:
+      url: http://127.0.0.1:9147/api/v1/chat/eval
+      method: POST
+      body:
+        prompt: "{{prompt}}"
+        input: "{{input}}"
+
+tests:
+  - vars:
+      input: "I want my own AI that can use my files and tools."
+    assert:
+      - type: contains
+        value: "RAG"
+      - type: contains
+        value: "tool policy"
+      - type: not-contains
+        value: "just use ChatGPT API"

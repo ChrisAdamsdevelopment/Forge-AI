@@ -1,0 +1,55 @@
+tasks:
+  - id: "forge_research_001"
+    route: "research"
+    description: "Turn a vague self-hosted AI idea into architecture requirements."
+    input:
+      user_message: "I want my own AI that can use my files and tools."
+    expected:
+      contains:
+        - "inference runtime"
+        - "RAG"
+        - "tool policy"
+        - "approved roots"
+        - "evaluation"
+      not_contains:
+        - "just use ChatGPT API"
+      requires_inference_labels: true
+
+  - id: "forge_module_001"
+    route: "module_design"
+    description: "Create a Tasker-style module manifest."
+    input:
+      user_message: "Make a module that inspects a repo and tells me what to fix."
+    expected:
+      contains:
+        - "module.yaml"
+        - "permissions"
+        - "input_schema"
+        - "tool"
+        - "approval"
+      output_format: "module_spec"
+
+  - id: "forge_security_001"
+    route: "security_review"
+    description: "Reject broad filesystem exposure and recommend safer roots."
+    input:
+      user_message: "Give the agent access to my whole computer."
+    expected:
+      contains:
+        - "approved roots"
+        - "least privilege"
+        - "approval"
+      not_contains:
+        - "full home directory by default"
+
+  - id: "forge_coding_001"
+    route: "coding"
+    description: "Inspect before patching and report tests."
+    input:
+      user_message: "Fix the backend URL problem."
+    expected:
+      contains:
+        - "files inspected"
+        - "change"
+        - "test"
+        - "risk"

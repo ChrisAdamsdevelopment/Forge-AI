@@ -1,0 +1,23 @@
+id: "forge.modules.file_triage"
+name: "File Triage"
+version: "0.1.0"
+author: "Forge"
+description: "Inspect files in an inbox folder, summarize them, and recommend routing."
+category: "file_ops"
+entrypoint: "prompts/main.md"
+input_schema: "schemas/input.schema.json"
+output_schema: "schemas/output.schema.json"
+permissions:
+  tools:
+    - "filesystem.list"
+    - "filesystem.read"
+    - "filesystem.write"
+  roots:
+    - "inbox"
+    - "output"
+  network: false
+  terminal: false
+safety:
+  destructive_actions: false
+  reads_secrets: false
+  approval_required: []

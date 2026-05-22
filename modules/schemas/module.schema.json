@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Forge Module Manifest",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "author",
+    "description",
+    "category",
+    "entrypoint",
+    "input_schema",
+    "output_schema",
+    "permissions",
+    "safety"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "entrypoint": {
+      "type": "string"
+    },
+    "input_schema": {
+      "type": "string"
+    },
+    "output_schema": {
+      "type": "string"
+    },
+    "permissions": {
+      "type": "object",
+      "required": [
+        "tools",
+        "roots"
+      ],
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "type": "boolean"
+        },
+        "terminal": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    "safety": {
+      "type": "object"
+    }
+  }
+}
