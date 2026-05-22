@@ -59,3 +59,5 @@ Implement a narrow **Phase 1 RAG ingestion/query baseline** in backend only:
 - add a minimal retrieval pipeline with deterministic chunking,
 - wire retrieval context into `/api/v1/chat` behind a feature flag,
 - and add focused tests for ingestion + retrieval correctness.
+
+- Added Phase 1A backend RAG foundation note (settings, schemas, chunking, path safety, tests, docs).
