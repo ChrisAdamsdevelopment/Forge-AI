@@ -35,7 +35,9 @@ class RagIngestRequest(BaseModel):
 class RagIngestResult(BaseModel):
     ingested_documents: int = 0
     ingested_chunks: int = 0
-    skipped_paths: list[str] = Field(default_factory=list)
+    skipped_paths: list[dict[str, str]] = Field(default_factory=list)
+    failed_paths: list[dict[str, str]] = Field(default_factory=list)
+    document_ids: list[str] = Field(default_factory=list)
 
 
 class RagSearchRequest(BaseModel):
