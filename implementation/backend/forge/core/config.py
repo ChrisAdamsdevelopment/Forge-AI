@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     api_key: str | None = None
 
     # ── RAG ──────────────────────────────────────────────────────────────────
+    knowledge_root: Path = Path("/srv/forge/knowledge")
+    rag_enabled: bool = False
+    rag_chunk_min_chars: int = Field(default=200, ge=50, le=5000)
+    rag_chunk_target_chars: int = Field(default=1200, ge=100, le=10000)
+    rag_chunk_overlap_chars: int = Field(default=120, ge=0, le=2000)
+    rag_allowed_extensions: list[str] = [".md", ".markdown", ".txt"]
     chunk_size: int = Field(default=512, ge=64, le=4096)   # tokens (approx chars/4)
     chunk_overlap: int = Field(default=64, ge=0, le=512)
     rag_top_k: int = Field(default=20, ge=1, le=100)       # candidates before rerank
@@ -74,7 +80,7 @@ class Settings(BaseSettings):
     enable_eval: bool = True
     enable_modules: bool = True
 
-    @field_validator("data_dir", "modules_dir", "rag_dir", mode="before")
+    @field_validator("data_dir", "modules_dir", "rag_dir", "knowledge_root", mode="before")
     @classmethod
     def _expand_path(cls, v: str | Path) -> Path:
         return Path(v).expanduser()
