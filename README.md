@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Forge Project Start Bundle
 
 Forge is a local-first, self-hosted personal AI agent platform designed around user-owned models, user-owned prompts, user-owned retrieval, controlled tool access, and a Tasker-style module ecosystem.
@@ -27,7 +26,3 @@ This bundle is meant to be uploaded into a new project as source material and al
 
 Default agent name: Forge  
 Default app goal: a local-first AI operating layer with RAG, tools, terminal/browser ability, module automation, evaluation, and later LoRA/QLoRA tuning.
-=======
-# Forge-AI
-Forge AI is an application to run customizable AI models
->>>>>>> 3c6de94abb740557192efa98f972f797300a6863

@@ -1,11 +1,12 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY pyproject.toml /app/
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" pydantic pydantic-settings httpx sqlalchemy aiosqlite jinja2 pyyaml
-
+COPY pyproject.toml README.md /app/
 COPY forge /app/forge
+
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir .
 
 EXPOSE 9147
 
