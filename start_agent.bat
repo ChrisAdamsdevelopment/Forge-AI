@@ -1,3 +1,4 @@
+REM Used for headless/development startup and as a companion to the Electron desktop shell process flow.
 @echo off
 setlocal
 

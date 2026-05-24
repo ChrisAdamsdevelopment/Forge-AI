@@ -1,0 +1,14 @@
+appId: com.forgeai.app
+productName: Forge AI
+directories:
+  output: dist
+win:
+  target: nsis
+files:
+  - main.js
+  - preload.js
+  - process-manager.js
+  - package.json
+extraResources:
+  - from: ../../implementation
+    to: implementation
