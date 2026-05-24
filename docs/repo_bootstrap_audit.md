@@ -61,3 +61,5 @@ Implement a narrow **Phase 1 RAG ingestion/query baseline** in backend only:
 - and add focused tests for ingestion + retrieval correctness.
 
 - Added Phase 1A backend RAG foundation note (settings, schemas, chunking, path safety, tests, docs).
+
+- 2026-05-22: Added Phase 1B ingestion service + initial architecture gap register and Codex backlog capture for deferred audit items.
