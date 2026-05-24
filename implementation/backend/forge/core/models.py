@@ -41,6 +41,7 @@ class Session(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="New conversation")
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_good: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
