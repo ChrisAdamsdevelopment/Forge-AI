@@ -3,16 +3,15 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
-
 _playwright = None
-_browser: Browser | None = None
-_context: BrowserContext | None = None
-_page: Page | None = None
+_browser: Any = None
+_context: Any = None
+_page: Any = None
 
 
-async def _get_page() -> Page:
+async def _get_page() -> Any:
     global _playwright, _browser, _context, _page
+    from playwright.async_api import async_playwright
     if _page and not _page.is_closed():
         return _page
 
