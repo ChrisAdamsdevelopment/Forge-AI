@@ -9,6 +9,7 @@ from forge.agent.tools.browser import browser_click, browser_get_content, browse
 from forge.agent.tools.filesystem import file_delete, file_list, file_mkdir, file_read, file_search, file_write
 from forge.agent.tools.memory import memory_retrieve, memory_store
 from forge.agent.tools.screen import keyboard_press, keyboard_type, mouse_click, mouse_move, mouse_position, screen_capture
+from forge.agent.tools.session_tools import mark_session_good
 from forge.agent.tools.terminal import terminal_execute
 from forge.agent.tools.thinking import sequential_thinking
 from forge.agent.tools.web import web_fetch
@@ -41,6 +42,7 @@ TOOLS: dict[str, Any] = {
         memory_store,
         memory_retrieve,
         sequential_thinking,
+        mark_session_good,
     ]
 }
 

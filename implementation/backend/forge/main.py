@@ -11,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from forge.api.routes import router
+from forge.api.v1.eval import router as eval_router
+from forge.api.v1.rag import router as rag_router
 from forge.core.config import settings
 from forge.core.database import create_all_tables
 
@@ -23,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
     settings.ensure_dirs()
-    api_key = settings.get_or_create_api_key()
+    settings.get_or_create_api_key()
     logger.info("Forge API starting on %s:%d", settings.host, settings.port)
     logger.info("API key stored at %s", settings.data_dir / "auth.key")
 
@@ -49,6 +51,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(router, prefix="/api/v1")
+    app.include_router(rag_router, prefix="/api/v1")
+    app.include_router(eval_router, prefix="/api/v1")
 
     @app.on_event("startup")
     async def _startup():
