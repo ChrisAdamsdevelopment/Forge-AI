@@ -17,6 +17,7 @@ from forge.api.v1.eval import router as eval_router
 from forge.api.v1.rag import router as rag_router
 from forge.core.config import settings
 from forge.core.database import create_all_tables
+from forge.modules.loader import ModuleLoader
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -60,6 +61,18 @@ def create_app() -> FastAPI:
     async def _startup():
         await create_all_tables()
         logger.info("Database tables ready")
+
+        loader = ModuleLoader()
+        loaded_for_registry = await loader.load_all(__import__("forge.agent.tools.registry", fromlist=["*"]))
+        logger.info("Loaded modules into internal registry: %s", loaded_for_registry or "none")
+
+        try:
+            from forge.tool_server import mcp
+
+            loaded_for_mcp = await loader.load_all(mcp)
+            logger.info("Loaded modules into FastMCP server: %s", loaded_for_mcp or "none")
+        except Exception as exc:
+            logger.debug("FastMCP module loading skipped: %s", exc)
 
     @app.get("/health", tags=["system"], include_in_schema=False)
     async def root_health():
