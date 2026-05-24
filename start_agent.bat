@@ -9,9 +9,9 @@ call .venv\Scripts\activate
 python -m pip install --upgrade pip
 python -m pip install -r implementation\backend\requirements.txt
 
-set NGROK_DOMAIN=your-domain.ngrok-free.dev
+set NGROK_DOMAIN=fossil-unicorn-defuse.ngrok-free.dev
 
-start /B ngrok http --domain=%NGROK_DOMAIN% 8000
+start /B ngrok http --domain=fossil-unicorn-defuse.ngrok-free.dev 8000
 
 timeout /t 2 /nobreak >nul
 
