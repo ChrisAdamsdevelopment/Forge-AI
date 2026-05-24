@@ -6,9 +6,11 @@ FastAPI application factory + startup/shutdown lifecycle hooks.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from forge.api.routes import router
 from forge.api.v1.eval import router as eval_router
@@ -50,9 +52,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(router, prefix="/api/v1")
-    app.include_router(rag_router, prefix="/api/v1")
-    app.include_router(eval_router, prefix="/api/v1")
+    app.include_router(router, prefix="/api")
+    app.include_router(rag_router, prefix="/api")
+    app.include_router(eval_router, prefix="/api")
 
     @app.on_event("startup")
     async def _startup():
@@ -62,6 +64,10 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["system"], include_in_schema=False)
     async def root_health():
         return {"status": "ok"}
+
+    static_dir = Path(__file__).resolve().parent / "static"
+    if static_dir.exists():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
     return app
 

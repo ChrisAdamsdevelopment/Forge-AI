@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forge AI</title>
+  <style>
+    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; flex-direction: column; }
+    #chat { flex: 1; overflow-y: auto; padding: 24px; }
+    .msg { max-width: 70%; margin: 10px 0; padding: 12px 14px; border-radius: 14px; white-space: pre-wrap; }
+    .user { margin-left: auto; background: #1f6feb; color: #fff; }
+    .assistant { background: #21262d; border: 1px solid #30363d; }
+    .tool { background: #161b22; border: 1px solid #30363d; border-radius: 10px; margin: 10px 0; }
+    .tool summary { cursor: pointer; padding: 10px; color: #f2cc60; }
+    .tool pre { margin: 0; padding: 0 10px 10px; color: #9da7b3; }
+    #bar { display: flex; padding: 14px; border-top: 1px solid #30363d; gap: 10px; }
+    #input { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; padding: 10px; }
+    button { background: #238636; border: none; border-radius: 8px; color: white; padding: 10px 16px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="chat"></div>
+  <div id="bar">
+    <input id="input" placeholder="Ask Forge AI..." />
+    <button id="send">Send</button>
+  </div>
+
+  <script>
+    const chat = document.getElementById('chat');
+    const input = document.getElementById('input');
+    const send = document.getElementById('send');
+    const sessionKey = 'forge_session_id';
+    const sessionId = localStorage.getItem(sessionKey) || crypto.randomUUID();
+    localStorage.setItem(sessionKey, sessionId);
+
+    let socket;
+    let activeAssistantEl = null;
+
+    function scrollBottom() { chat.scrollTop = chat.scrollHeight; }
+    function addMessage(text, cls) {
+      const el = document.createElement('div');
+      el.className = `msg ${cls}`;
+      el.textContent = text;
+      chat.appendChild(el);
+      scrollBottom();
+      return el;
+    }
+    function addToolCall(toolName, payload) {
+      const card = document.createElement('details');
+      card.className = 'tool';
+      card.innerHTML = `<summary>🔧 Calling: ${toolName}</summary><pre>${JSON.stringify(payload, null, 2)}</pre>`;
+      chat.appendChild(card);
+      scrollBottom();
+    }
+
+    function connect() {
+      socket = new WebSocket(`ws://localhost:9147/api/ws/chat/${sessionId}`);
+      socket.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'token') {
+          if (!activeAssistantEl) activeAssistantEl = addMessage('', 'assistant');
+          activeAssistantEl.textContent += msg.content;
+          scrollBottom();
+        } else if (msg.type === 'done') {
+          activeAssistantEl = null;
+        } else if (msg.type === 'tool_call_start') {
+          addToolCall(msg.tool_name || 'tool', msg);
+        } else if (msg.type === 'error') {
+          addMessage(`Error: ${msg.message}`, 'assistant');
+        }
+      };
+      socket.onclose = () => setTimeout(connect, 1500);
+    }
+
+    function sendMessage() {
+      const content = input.value.trim();
+      if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
+      addMessage(content, 'user');
+      socket.send(JSON.stringify({ type: 'user_message', content }));
+      input.value = '';
+    }
+
+    send.onclick = sendMessage;
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+    connect();
+  </script>
+</body>
+</html>
