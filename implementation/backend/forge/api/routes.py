@@ -166,7 +166,31 @@ async def ws_chat(websocket: WebSocket, session_id: str):
                         messages=history,
                         model=event.get("model"),
                     )
-                    async for token in stream:
+                    async for stream_event in stream:
+                        if isinstance(stream_event, str):
+                            token = stream_event
+                        elif stream_event.get("type") == "text":
+                            token = stream_event.get("content", "")
+                        elif stream_event.get("type") == "tool_call":
+                            arguments_raw = stream_event.get("arguments", "{}")
+                            try:
+                                arguments = json.loads(arguments_raw)
+                            except json.JSONDecodeError:
+                                arguments = arguments_raw
+                            await websocket.send_json(
+                                {
+                                    "type": "tool_call_start",
+                                    "tool_name": stream_event.get("name", ""),
+                                    "tool_call_id": stream_event.get("id", ""),
+                                    "arguments": arguments,
+                                }
+                            )
+                            continue
+                        elif stream_event.get("type") == "error":
+                            await websocket.send_json({"type": "error", "message": stream_event.get("message", "")})
+                            continue
+                        else:
+                            continue
                         full_response += token
                         token_count += 1
                         await websocket.send_json({"type": "token", "content": token})

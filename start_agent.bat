@@ -18,6 +18,8 @@ timeout /t 2 /nobreak >nul
 
 start /B python implementation\backend\forge\tool_server.py
 start /B python implementation\backend\forge\main.py
+start /B python implementation\backend\forge\pentest_server.py
+start /B python implementation\backend\forge\router_server.py
 
-echo Forge MCP, FastAPI, and ngrok started.
+echo Forge MCP, Pentest MCP, Router MCP, FastAPI, and ngrok started.
 endlocal

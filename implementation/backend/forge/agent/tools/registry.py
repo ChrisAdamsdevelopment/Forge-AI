@@ -10,6 +10,16 @@ from forge.agent.tools.filesystem import file_delete, file_list, file_mkdir, fil
 from forge.agent.tools.memory import memory_retrieve, memory_store
 from forge.agent.tools.screen import keyboard_press, keyboard_type, mouse_click, mouse_move, mouse_position, screen_capture
 from forge.agent.tools.session_tools import mark_session_good
+from forge.agent.tools.spotify import (
+    spotify_navigate_home,
+    spotify_search_song,
+    spotify_play_first_result,
+    spotify_like_track,
+    spotify_create_playlist,
+    spotify_add_to_playlist,
+    spotify_screenshot,
+    spotify_close,
+)
 from forge.agent.tools.terminal import terminal_execute
 from forge.agent.tools.thinking import sequential_thinking
 from forge.agent.tools.web import web_fetch
@@ -43,6 +53,14 @@ TOOLS: dict[str, Any] = {
         memory_retrieve,
         sequential_thinking,
         mark_session_good,
+        spotify_navigate_home,
+        spotify_search_song,
+        spotify_play_first_result,
+        spotify_like_track,
+        spotify_create_playlist,
+        spotify_add_to_playlist,
+        spotify_screenshot,
+        spotify_close,
     ]
 }
 

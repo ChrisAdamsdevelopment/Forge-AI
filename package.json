@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "fastmcp": "^4.0.1",
+    "mcp": "^1.4.2"
+  }
+}
