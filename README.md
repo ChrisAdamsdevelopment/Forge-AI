@@ -1,28 +1,22 @@
-# Forge Project Start Bundle
+# Forge AI
+A local-first, self-hosted personal AI agent platform with RAG, MCP tools, and desktop app.
 
-Forge is a local-first, self-hosted personal AI agent platform designed around user-owned models, user-owned prompts, user-owned retrieval, controlled tool access, and a Tasker-style module ecosystem.
+## Quick Start
+1. `git clone <repo-url>`
+2. `cd Forge-AI`
+3. `pip install -r implementation/backend/requirements.txt`
+4. `python implementation/backend/forge/main.py` (or `start_agent.bat` on Windows)
 
-This bundle is meant to be uploaded into a new project as source material and also used as the seed of the future Forge repository.
+## What It Can Do
+- Browser automation, screen control, terminal execution, and filesystem operations
+- App/window control, web fetch, memory tools, and sequential thinking
+- RAG ingestion/search and optional prompt-engineering module tools
 
-## What is included
+## Architecture
+Forge runs a FastAPI backend, agent graph, MCP tool server, and optional modular tool packs; see `docs/` for architecture plans and implementation notes.
 
-- Source docs for project planning and RAG
-- Persistent system prompts and routing prompts
-- Architecture and implementation blueprints
-- MCP/tool policy and approved file-root model
-- Tasker-style module/plugin specifications
-- Evaluation seeds and training-data seeds
-- Minimal implementation scaffolding for the first backend prototype
+## Development
+Read `CODEX_INSTRUCTIONS.md` for workflow guidance. Run `ruff check` and `pytest` before shipping changes.
 
-## Recommended upload order
-
-1. Upload the files in `docs/` first.
-2. Upload the files in `prompts/` second.
-3. Upload `modules/specs/` third.
-4. Upload `eval/golden_tasks.yaml` and `training/finetune_notes.md` only if the project needs implementation planning.
-5. Do not upload `.env.example`, runtime configs with real paths, or future secrets.
-
-## Project identity
-
-Default agent name: Forge  
-Default app goal: a local-first AI operating layer with RAG, tools, terminal/browser ability, module automation, evaluation, and later LoRA/QLoRA tuning.
+## Modules
+Forge discovers modules from `modules/*/module.json` and loads enabled entries at startup. The `prompt_engineer` module is included as a disabled-by-default example.
