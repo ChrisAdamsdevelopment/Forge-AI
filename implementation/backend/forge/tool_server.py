@@ -17,6 +17,9 @@ TOOL_MODULES = [
     "forge.agent.tools.terminal",
     "forge.agent.tools.filesystem",
     "forge.agent.tools.apps",
+    "forge.agent.tools.web",
+    "forge.agent.tools.memory",
+    "forge.agent.tools.thinking",
 ]
 
 mcp = FastMCP("forge-tools")
