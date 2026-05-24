@@ -10,6 +10,7 @@ from aiohttp import web
 from fastmcp import FastMCP
 
 from forge.config import DASHBOARD_PORT, FAST_MCP_PORT, NGROK_DOMAIN
+from forge.services.rag_service import rag_service
 
 TOOL_MODULES = [
     "forge.agent.tools.browser",
@@ -28,11 +29,24 @@ MISSING_MODULES: list[str] = []
 NON_ASYNC_FUNCTIONS: list[str] = []
 
 
+async def rag_ingest_file(file_path: str) -> dict:
+    """Ingest a local file into the Forge RAG index."""
+    return await rag_service.ingest_file(file_path)
+
+
+async def rag_search(query: str, top_k: int = 5) -> dict:
+    """Search the Forge RAG index for relevant chunks."""
+    return await rag_service.search(query=query, top_k=top_k)
+
+
+
 def _is_public_tool_function(obj: Any, module_name: str) -> bool:
     return inspect.isfunction(obj) and obj.__module__ == module_name and not obj.__name__.startswith("_")
 
 
 def register_tools() -> None:
+    mcp.tool(name="rag_ingest_file", description="Ingest a local file into the Forge RAG index.")(rag_ingest_file)
+    mcp.tool(name="rag_search", description="Search the Forge RAG index for relevant chunks.")(rag_search)
     for module_name in TOOL_MODULES:
         try:
             module = importlib.import_module(module_name)

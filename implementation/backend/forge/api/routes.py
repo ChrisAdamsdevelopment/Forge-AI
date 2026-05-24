@@ -27,6 +27,7 @@ from forge.core.config import settings
 from forge.core.security import verify_api_key
 from forge.services.inference_service import InferenceService
 from forge.services.module_service import ModuleService
+from forge.services.rag_service import rag_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -270,3 +271,36 @@ async def get_config(_key: str = Depends(verify_api_key)):
         "enable_training": settings.enable_training,
         "has_remote_inference": settings.remote_inference_url is not None,
     }
+
+
+class RagIngestFileRequest(BaseModel):
+    file_path: str
+
+
+class RagIngestDirectoryRequest(BaseModel):
+    dir_path: str
+    pattern: str = "*"
+
+
+class RagDeleteRequest(BaseModel):
+    filename: str
+
+
+@router.post("/rag/ingest/file", tags=["rag"])
+async def rag_ingest_file(request: RagIngestFileRequest, _key: str = Depends(verify_api_key)):
+    return await rag_service.ingest_file(request.file_path)
+
+
+@router.post("/rag/ingest/directory", tags=["rag"])
+async def rag_ingest_directory(request: RagIngestDirectoryRequest, _key: str = Depends(verify_api_key)):
+    return await rag_service.ingest_directory(request.dir_path, request.pattern)
+
+
+@router.get("/rag/search", tags=["rag"])
+async def rag_search(q: str, top_k: int = 5, _key: str = Depends(verify_api_key)):
+    return await rag_service.search(query=q, top_k=top_k)
+
+
+@router.delete("/rag/document", tags=["rag"])
+async def rag_delete_document(request: RagDeleteRequest, _key: str = Depends(verify_api_key)):
+    return await rag_service.delete_from_index(request.filename)
