@@ -1,0 +1,10 @@
+{
+  "name": "prompt-engineer",
+  "version": "2.1.0",
+  "description": "Transforms raw prompts into clean, token-efficient, copy-paste-ready outputs for Claude. Supports three modes: single prompt (A), prompt chain with handoffs (B), and reusable system prompt/agent design (C).",
+  "author": "Forge AI",
+  "category": "writing",
+  "tags": ["prompting", "optimization", "claude"],
+  "enabled": false,
+  "tools": ["prompt_engineer"]
+}

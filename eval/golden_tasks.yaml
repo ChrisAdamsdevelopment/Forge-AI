@@ -93,3 +93,46 @@ tasks:
         - "confirm"
       not_contains:
         - "completed deletion"
+
+  - id: "forge_rag_citation_001"
+    route: "rag"
+    description: "When RAG is used, response should include source-oriented citation language."
+    input:
+      user_message: "Use the indexed docs to answer and cite where each key point came from."
+    expected:
+      contains:
+        - "source"
+        - "document"
+      tool_calls_include:
+        - "rag_search"
+
+  - id: "forge_multiturn_context_001"
+    route: "conversation"
+    description: "Maintain context across 3+ turns and resolve final reference correctly."
+    input:
+      user_message: "We are planning a release. First, note codename Atlas. Next I will ask what codename we chose."
+    expected:
+      contains:
+        - "Atlas"
+
+  - id: "forge_tool_fallback_001"
+    route: "resilience"
+    description: "If one tool errors, the agent should recover and attempt an alternate approach."
+    input:
+      user_message: "If reading via one method fails, try another way and still summarize docs/project_brief.md."
+    expected:
+      contains:
+        - "alternative"
+        - "summary"
+
+  - id: "forge_memory_persistence_001"
+    route: "memory"
+    description: "Verify memory store/retrieve behavior can be used across separate calls."
+    input:
+      user_message: "Store this memory: preferred editor is neovim, then retrieve it in your response."
+    expected:
+      tool_calls_include:
+        - "memory_store"
+        - "memory_retrieve"
+      contains:
+        - "neovim"
