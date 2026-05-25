@@ -8,7 +8,6 @@ Run this instead of tool_server.py to use the split architecture.
 
 from __future__ import annotations
 
-import asyncio
 import sys
 import subprocess
 from pathlib import Path
