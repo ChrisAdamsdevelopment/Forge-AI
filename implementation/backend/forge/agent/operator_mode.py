@@ -313,7 +313,7 @@ Format as JSON array of {{tool_name, parameters, rationale}}"""
             return True  # Auto-approve recon
 
         logger.warning(f"\n{'='*70}")
-        logger.warning(f"HUMAN-IN-THE-LOOP CHECKPOINT - APPROVAL REQUIRED")
+        logger.warning("HUMAN-IN-THE-LOOP CHECKPOINT - APPROVAL REQUIRED")
         logger.warning(f"{'='*70}")
         logger.warning(f"Tool: {step.tool_name}")
         logger.warning(f"Target: {self.target}")
@@ -433,7 +433,7 @@ Automated attack path planning completed for {self.target}.
             if step.findings:
                 md += f"- **Findings**: {json.dumps(step.findings, indent=2)}\n"
 
-        md += f"""
+        md += """
 ## Recommendations
 
 1. Review all automated findings with manual verification

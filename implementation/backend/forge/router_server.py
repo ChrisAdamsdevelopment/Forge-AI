@@ -1,18 +1,36 @@
 """FastMCP server for OpenWrt router automation via rpcd JSON-RPC API.
 
-Connects to OpenWrt router at 192.168.1.1 over JSON-RPC ubus interface.
-Provides tools for system management, network configuration, WiFi, and diagnostics.
-All tools enforce least-privilege ACLs on the router side.
+Connects to an OpenWrt router (default 192.168.1.1) over the ubus HTTP
+JSON-RPC interface. Provides tools for system inspection, network status,
+WiFi diagnostics, firewall management, and UCI configuration with
+NETCONF-style confirmed-commit semantics so an autonomous agent that
+breaks connectivity auto-recovers.
+
+Configuration via environment:
+    FORGE_ROUTER_HOST       - router IP/hostname (default: 192.168.1.1)
+    FORGE_ROUTER_PORT       - router HTTP port (default: 80)
+    FORGE_ROUTER_SCHEME     - "http" or "https" (default: http)
+    FORGE_ROUTER_USERNAME   - rpcd username (default: mcp_ai_agent)
+    FORGE_ROUTER_PASSWORD   - rpcd password (required to authenticate)
+    FORGE_ROUTER_VERIFY_TLS - "true"/"false" (default: true for https)
+    FORGE_ROUTER_MCP_PORT   - port the FastMCP server binds (default: 8002)
+
+The companion ACL (acl_mcp_ai_agent.json) must be deployed to
+/usr/share/rpcd/acl.d/ on the router so rpcd enforces least-privilege
+on the server side. Forge-side validators provide defence in depth.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
+import ipaddress
+import itertools
+import logging
+import os
 import re
 import sys
-import time
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,18 +40,38 @@ from fastmcp import FastMCP
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from forge.config import FASTAPI_PORT
 
-# Configuration
-ROUTER_HOST = "192.168.1.1"
-ROUTER_PORT = 80
-ROUTER_ENDPOINT = f"http://{ROUTER_HOST}:{ROUTER_PORT}/ubus"
-ROUTER_USERNAME = "root"
-ROUTER_PASSWORD = None  # Set via environment or config
-ROUTER_MCP_PORT = 8002
-REQUEST_TIMEOUT = 30.0
+logger = logging.getLogger(__name__)
 
-# UBUS JSON-RPC constants
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Invalid integer for %s=%r; using default %d", name, raw, default)
+        return default
+
+
+ROUTER_HOST = os.environ.get("FORGE_ROUTER_HOST", "192.168.1.1")
+ROUTER_PORT = _env_int("FORGE_ROUTER_PORT", 80)
+ROUTER_SCHEME = os.environ.get("FORGE_ROUTER_SCHEME", "http").lower()
+ROUTER_USERNAME = os.environ.get("FORGE_ROUTER_USERNAME", "mcp_ai_agent")
+ROUTER_PASSWORD = os.environ.get("FORGE_ROUTER_PASSWORD")
+ROUTER_VERIFY_TLS = _env_bool("FORGE_ROUTER_VERIFY_TLS", True)
+ROUTER_MCP_PORT = _env_int("FORGE_ROUTER_MCP_PORT", 8002)
+REQUEST_TIMEOUT = float(os.environ.get("FORGE_ROUTER_TIMEOUT", "30"))
+
+# ubus status codes — these come from the OpenWrt project.
 UBUS_STATUS_OK = 0
 UBUS_STATUS_INVALID_COMMAND = 1
 UBUS_STATUS_INVALID_ARGUMENT = 2
@@ -60,96 +98,203 @@ STATUS_MESSAGES = {
     UBUS_STATUS_CONNECTION_FAILED: "Connection failed",
 }
 
+# IETF AINETOPS error codes (draft-zw-opsawg-mcp-network-mgmt).
+ERR_CONFIG_INCOMPATIBLE = -32084
+ERR_CONFIRMED_COMMIT_TIMEOUT = -32086
+ERR_PERMISSION_DENIED = -32088
+ERR_TRANSPORT = -32090
+ERR_INVALID_PARAM = -32602  # JSON-RPC standard "invalid params"
+
+ANONYMOUS_SESSION = "00000000000000000000000000000000"
+
+# Defensive validators. The router-side ACL is the real authority, but the
+# OpenWrt rpcd parsers have a history of CVEs, so we don't forward
+# arbitrary LLM-generated strings to the wire.
+_UCI_NAME_RE = re.compile(r"^[A-Za-z0-9_]{1,32}$")
+_INTERFACE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,16}$")
+_SERVICE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+_PACKAGE_NAME_RE = re.compile(r"^[A-Za-z0-9_.+-]{1,64}$")
+_RULE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_RADIO_NAME_RE = re.compile(r"^radio[0-9]{1,2}$")
+_PORT_LIST_RE = re.compile(r"^\d{1,5}(?:[,-]\d{1,5})*$")
+_FIREWALL_TARGETS = frozenset({"ACCEPT", "DROP", "REJECT"})
+_FIREWALL_PROTOS = frozenset({"tcp", "udp", "icmp", "all"})
+
+
+class ValidationError(ValueError):
+    """Raised by tool validators when an argument fails an allowlist check."""
+
+
+def _require(pattern: re.Pattern[str], value: str, field_name: str) -> str:
+    if not isinstance(value, str) or not pattern.fullmatch(value):
+        raise ValidationError(f"Invalid {field_name}: {value!r}")
+    return value
+
+
+def _require_in(allowed: frozenset[str], value: str, field_name: str) -> str:
+    if value not in allowed:
+        raise ValidationError(f"Invalid {field_name}: {value!r} (allowed: {sorted(allowed)})")
+    return value
+
+
+def _require_int_range(value: int, low: int, high: int, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < low or value > high:
+        raise ValidationError(f"{field_name} must be int in [{low},{high}], got {value!r}")
+    return value
+
+
+def _require_host(value: str, field_name: str = "target") -> str:
+    if not isinstance(value, str) or not value or len(value) > 253:
+        raise ValidationError(f"Invalid {field_name}: empty or too long")
+    try:
+        ipaddress.ip_address(value)
+        return value
+    except ValueError:
+        pass
+    # Hostname: RFC 1123 label, no shell metacharacters.
+    if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*", value):
+        raise ValidationError(f"Invalid {field_name}: {value!r}")
+    return value
+
+
+def _error_response(code: int, reason: str, **extra: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {"status": "error", "code": code, "reason": reason}
+    out.update(extra)
+    return out
+
+
+def _map_ubus_status(status: int) -> int:
+    if status == UBUS_STATUS_PERMISSION_DENIED:
+        return ERR_PERMISSION_DENIED
+    if status in (UBUS_STATUS_INVALID_ARGUMENT, UBUS_STATUS_INVALID_COMMAND):
+        return ERR_INVALID_PARAM
+    return ERR_CONFIG_INCOMPATIBLE
+
+
+# ---------------------------------------------------------------------------
+# Connection manager
+# ---------------------------------------------------------------------------
+
+
+class UbusError(RuntimeError):
+    """Generic UBUS-side failure (non-permission)."""
+
+    def __init__(self, status: int, message: str | None = None) -> None:
+        self.status = status
+        super().__init__(message or STATUS_MESSAGES.get(status, f"ubus status {status}"))
+
+
+class UbusPermissionError(PermissionError):
+    """rpcd rejected the call with PERMISSION_DENIED."""
+
 
 class ConnectionManager:
-    """Manages authenticated UBUS JSON-RPC sessions with token caching and auto-refresh.
-    
-    Handles session.login, token caching, expiry tracking, and automatic refresh.
-    Translates UBUS errors into structured exceptions.
+    """Authenticated ubus JSON-RPC client.
+
+    - Caches the session token until ~5 minutes before the router-reported
+      expiry, then transparently re-logs in.
+    - One global lock guards the login flow; concurrent ``call()`` requests
+      are otherwise unserialised and reuse the cached token.
+    - On PERMISSION_DENIED the call is retried exactly once after a forced
+      re-login so we don't spuriously fail when a session times out under us.
     """
 
     def __init__(
         self,
         host: str = ROUTER_HOST,
         port: int = ROUTER_PORT,
+        scheme: str = ROUTER_SCHEME,
         username: str = ROUTER_USERNAME,
-        password: str | None = None,
+        password: str | None = ROUTER_PASSWORD,
         timeout: float = REQUEST_TIMEOUT,
-    ):
-        """Initialize connection manager.
-        
-        Args:
-            host: Router IP address (default: 192.168.1.1)
-            port: HTTP port (default: 80)
-            username: UBUS RPC username (default: root)
-            password: UBUS RPC password
-            timeout: Request timeout in seconds (default: 30.0)
-        """
+        verify_tls: bool = ROUTER_VERIFY_TLS,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        if scheme not in ("http", "https"):
+            raise ValueError(f"scheme must be http or https, got {scheme!r}")
         self.host = host
         self.port = port
+        self.scheme = scheme
         self.username = username
         self.password = password
         self.timeout = timeout
-        self.endpoint = f"http://{host}:{port}/ubus"
+        self.verify_tls = verify_tls
+        self.endpoint = f"{scheme}://{host}:{port}/ubus"
 
         self._session_token: str | None = None
         self._token_expiry: datetime | None = None
-        self._client: httpx.AsyncClient | None = None
+        self._client = client
         self._lock = asyncio.Lock()
+        self._id_counter = itertools.count(1)
+
+    def _next_id(self) -> int:
+        return next(self._id_counter)
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create async HTTP client."""
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=self.timeout)
+            verify = self.verify_tls if self.scheme == "https" else True
+            self._client = httpx.AsyncClient(timeout=self.timeout, verify=verify)
         return self._client
 
-    async def _login(self) -> str:
-        """Authenticate and retrieve session token.
-        
-        Returns:
-            UBUS session token
-            
-        Raises:
-            RuntimeError: If authentication fails
-        """
+    async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         client = await self._get_client()
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "call",
-            "params": ["00000000000000000000000000000000", "session", "login", {"username": self.username, "password": self.password}],
-        }
-
         try:
             response = await client.post(self.endpoint, json=payload)
             response.raise_for_status()
-            data = response.json()
-
-            if data.get("result", [None])[0] != UBUS_STATUS_OK:
-                status = data.get("result", [1])[0]
-                raise RuntimeError(f"Login failed: {STATUS_MESSAGES.get(status, 'Unknown error')}")
-
-            result = data.get("result", [None, {}])[1]
-            self._session_token = result.get("ubus_rpc_session")
-            self._token_expiry = datetime.now() + timedelta(hours=1)  # Typical session timeout
-
-            return self._session_token
+            return response.json()
         except httpx.HTTPError as exc:
-            raise RuntimeError(f"Connection failed to {self.endpoint}: {exc}")
+            raise UbusError(UBUS_STATUS_CONNECTION_FAILED, f"transport: {exc}") from exc
 
-    async def _ensure_authenticated(self) -> str:
-        """Ensure valid session token, refreshing if needed.
-        
-        Returns:
-            Valid UBUS session token
-        """
+    async def _login(self) -> str:
+        if not self.password:
+            raise UbusError(
+                UBUS_STATUS_PERMISSION_DENIED,
+                "FORGE_ROUTER_PASSWORD not set; cannot authenticate",
+            )
+
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "call",
+            "params": [
+                ANONYMOUS_SESSION,
+                "session",
+                "login",
+                {"username": self.username, "password": self.password},
+            ],
+        }
+        data = await self._post(payload)
+
+        result = data.get("result")
+        if not isinstance(result, list) or not result:
+            raise UbusError(UBUS_STATUS_UNKNOWN_ERROR, f"malformed login response: {data!r}")
+
+        status = result[0]
+        if status != UBUS_STATUS_OK:
+            raise UbusError(status, f"login failed: {STATUS_MESSAGES.get(status, status)}")
+
+        body = result[1] if len(result) > 1 else {}
+        if not isinstance(body, dict):
+            raise UbusError(UBUS_STATUS_UNKNOWN_ERROR, "login result missing session body")
+
+        token = body.get("ubus_rpc_session")
+        if not isinstance(token, str) or len(token) != 32:
+            raise UbusError(UBUS_STATUS_UNKNOWN_ERROR, "login result missing ubus_rpc_session")
+
+        timeout_s = body.get("timeout")
+        if not isinstance(timeout_s, int) or timeout_s <= 0:
+            timeout_s = 300  # rpcd's documented default
+        self._session_token = token
+        self._token_expiry = datetime.now(timezone.utc) + timedelta(seconds=timeout_s)
+        logger.info("ubus session established (expires in %ds)", timeout_s)
+        return token
+
+    async def _ensure_authenticated(self, force: bool = False) -> str:
         async with self._lock:
-            # Check if token exists and is not expiring soon (refresh 5 min before expiry)
-            if self._session_token and self._token_expiry:
-                if datetime.now() < self._token_expiry - timedelta(minutes=5):
+            if not force and self._session_token and self._token_expiry:
+                # Refresh five minutes before the router will drop us.
+                if datetime.now(timezone.utc) < self._token_expiry - timedelta(minutes=5):
                     return self._session_token
-
-            # Login or refresh
             return await self._login()
 
     async def call(
@@ -158,411 +303,519 @@ class ConnectionManager:
         method: str,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Call a UBUS RPC method.
-        
-        Args:
-            namespace: UBUS namespace (e.g., "system", "network.interface")
-            method: Method name (e.g., "info", "status")
-            params: Optional parameters dict
-            
-        Returns:
-            Result data dict
-            
-        Raises:
-            PermissionError: If UBUS_STATUS_PERMISSION_DENIED
-            RuntimeError: For other UBUS errors
-        """
-        token = await self._ensure_authenticated()
-        client = await self._get_client()
+        """Invoke a ubus method, transparently retrying once on stale session."""
 
-        payload = {
-            "jsonrpc": "2.0",
-            "id": int(time.time() * 1000),
-            "method": "call",
-            "params": [token, namespace, method, params or {}],
-        }
+        attempts_left = 2
+        force_login = False
+        while attempts_left > 0:
+            attempts_left -= 1
+            token = await self._ensure_authenticated(force=force_login)
 
-        try:
-            response = await client.post(self.endpoint, json=payload)
-            response.raise_for_status()
-            data = response.json()
+            payload = {
+                "jsonrpc": "2.0",
+                "id": self._next_id(),
+                "method": "call",
+                "params": [token, namespace, method, params or {}],
+            }
+            data = await self._post(payload)
 
-            # Extract status and result
-            result_array = data.get("result", [1, {}])
-            status = result_array[0]
+            result = data.get("result")
+            if not isinstance(result, list) or not result:
+                raise UbusError(
+                    UBUS_STATUS_UNKNOWN_ERROR, f"malformed response for {namespace}.{method}"
+                )
 
+            status = result[0]
             if status == UBUS_STATUS_OK:
-                return result_array[1] if len(result_array) > 1 else {}
-            elif status == UBUS_STATUS_PERMISSION_DENIED:
-                raise PermissionError(f"Permission denied for {namespace}.{method}")
-            else:
-                raise RuntimeError(f"UBUS error {status}: {STATUS_MESSAGES.get(status, 'Unknown error')}")
-        except httpx.HTTPError as exc:
-            raise RuntimeError(f"HTTP error calling {namespace}.{method}: {exc}")
+                body = result[1] if len(result) > 1 else {}
+                return body if isinstance(body, dict) else {"value": body}
+
+            if status == UBUS_STATUS_PERMISSION_DENIED and attempts_left > 0:
+                # Could be expired session — drop the token and retry once.
+                logger.info("ubus permission denied for %s.%s; re-authenticating", namespace, method)
+                self._session_token = None
+                self._token_expiry = None
+                force_login = True
+                continue
+
+            if status == UBUS_STATUS_PERMISSION_DENIED:
+                raise UbusPermissionError(f"{namespace}.{method}: permission denied")
+
+            raise UbusError(status, f"{namespace}.{method}: {STATUS_MESSAGES.get(status, status)}")
+
+        # Unreachable: loop either returns or raises.
+        raise UbusError(UBUS_STATUS_UNKNOWN_ERROR, "exhausted retries")
 
     async def close(self) -> None:
-        """Close HTTP client connection."""
-        if self._client:
+        if self._client is not None:
             await self._client.aclose()
+            self._client = None
 
 
-# Initialize FastMCP server
-mcp = FastMCP("OpenWrt Router Agent")
-conn_mgr = ConnectionManager(password=ROUTER_PASSWORD)
+# ---------------------------------------------------------------------------
+# Confirmed-commit registry
+# ---------------------------------------------------------------------------
 
 
-# ============================================================================
-# READ-ONLY TOOLS (safe inspection, no configuration changes)
-# ============================================================================
+@dataclass
+class _PendingCommit:
+    commit_id: str
+    config: str
+    revert_at: datetime
+    task: asyncio.Task[Any] = field(repr=False)
 
 
-@mcp.tool(description="Get router system information: board name, firmware, uptime, CPU load.", readOnlyHint=True)
-async def router_system_info() -> dict[str, Any]:
-    """Retrieve system information from the router.
-    
-    Returns:
-        Dict with: board_name, firmware_version, kernel_version, uptime_seconds, 
-                   cpu_count, memory_total_kb, memory_free_kb, load_1min, load_5min, load_15min
-    """
+_pending_commits: dict[str, _PendingCommit] = {}
+_pending_commits_lock = asyncio.Lock()
+_commit_id_counter = itertools.count(1)
+
+
+async def _schedule_auto_revert(
+    conn: ConnectionManager, commit_id: str, config: str, timeout_seconds: int
+) -> None:
     try:
-        info = await conn_mgr.call("system", "info")
-        board = await conn_mgr.call("system", "board")
+        await asyncio.sleep(timeout_seconds)
+    except asyncio.CancelledError:
+        return
+    async with _pending_commits_lock:
+        pending = _pending_commits.pop(commit_id, None)
+    if pending is None:
+        return
+    logger.warning(
+        "Confirmed-commit timeout reached for %s (config=%s); reverting",
+        commit_id,
+        config,
+    )
+    try:
+        await conn.call("uci", "revert", {"config": config})
+        await conn.call("uci", "commit", {"config": config})
+    except (UbusError, UbusPermissionError) as exc:
+        logger.exception("auto-revert for %s failed: %s", commit_id, exc)
 
+
+# ---------------------------------------------------------------------------
+# FastMCP server + tools
+# ---------------------------------------------------------------------------
+
+
+mcp = FastMCP("OpenWrt Router Agent")
+_conn_mgr = ConnectionManager()
+
+
+def _conn() -> ConnectionManager:
+    """Indirection so tests can swap in a stub."""
+    return _conn_mgr
+
+
+def _handle(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, ValidationError):
+        return _error_response(ERR_INVALID_PARAM, str(exc))
+    if isinstance(exc, UbusPermissionError):
+        return _error_response(ERR_PERMISSION_DENIED, str(exc))
+    if isinstance(exc, UbusError):
+        return _error_response(_map_ubus_status(exc.status), str(exc), ubus_status=exc.status)
+    return _error_response(ERR_TRANSPORT, f"{type(exc).__name__}: {exc}")
+
+
+# ============================================================================
+# READ-ONLY TOOLS
+# ============================================================================
+
+
+@mcp.tool(description="Get router system information: board name, firmware, uptime, CPU load.")
+async def router_system_info() -> dict[str, Any]:
+    try:
+        info = await _conn().call("system", "info")
+        board = await _conn().call("system", "board")
+        load = info.get("load") or []
         return {
             "status": "ok",
             "board_name": board.get("board_name"),
             "model": board.get("model"),
-            "firmware_version": board.get("release", {}).get("version"),
+            "firmware_version": (board.get("release") or {}).get("version"),
             "kernel_version": board.get("kernel"),
             "uptime_seconds": info.get("uptime"),
             "cpu_count": info.get("nprocs"),
             "memory_total_kb": info.get("memtotal"),
             "memory_free_kb": info.get("memfree"),
-            "load_1min": info.get("load")[0] if info.get("load") else None,
-            "load_5min": info.get("load")[1] if info.get("load") else None,
-            "load_15min": info.get("load")[2] if info.get("load") else None,
+            "load_1min": load[0] if len(load) > 0 else None,
+            "load_5min": load[1] if len(load) > 1 else None,
+            "load_15min": load[2] if len(load) > 2 else None,
         }
-    except PermissionError as exc:
-        return {"status": "error", "reason": str(exc)}
-    except RuntimeError as exc:
-        return {"status": "error", "reason": str(exc)}
+    except Exception as exc:  # noqa: BLE001 — handled below
+        return _handle(exc)
 
 
-@mcp.tool(description="List all network interfaces with current status (up/down) and IP addresses.", readOnlyHint=True)
+@mcp.tool(description="List all network interfaces with up/down status and IP addresses.")
 async def router_network_list() -> dict[str, Any]:
-    """List all network interfaces on the router.
-    
-    Returns:
-        Dict with list of interfaces, each containing: name, status, ip_address, 
-                   netmask, gateway, dns_servers, mac_address, mtu, type (lan/wan)
-    """
     try:
-        interfaces = await conn_mgr.call("network", "interface")
-
+        dump = await _conn().call("network.interface", "dump")
+        interfaces = dump.get("interface", []) if isinstance(dump, dict) else []
         result = []
-        for iface_name in interfaces.get("interface", []):
-            try:
-                status = await conn_mgr.call("network.interface", "status", {"interface": iface_name})
-                result.append({
-                    "name": iface_name,
-                    "up": status.get("up", False),
-                    "ipv4_address": status.get("ipv4_address"),
-                    "ipv4_prefix": status.get("ipv4_prefix"),
-                    "ipv6_address": status.get("ipv6_address"),
-                    "ipv6_prefix": status.get("ipv6_prefix"),
-                    "mac_address": status.get("macaddr"),
-                    "mtu": status.get("mtu"),
-                    "type": status.get("interface_type", "unknown"),
-                })
-            except (PermissionError, RuntimeError):
-                pass
-
+        for entry in interfaces:
+            if not isinstance(entry, dict):
+                continue
+            v4 = (entry.get("ipv4-address") or [{}])[0]
+            v6 = (entry.get("ipv6-address") or [{}])[0]
+            result.append(
+                {
+                    "name": entry.get("interface"),
+                    "up": bool(entry.get("up")),
+                    "proto": entry.get("proto"),
+                    "ipv4_address": v4.get("address"),
+                    "ipv4_mask": v4.get("mask"),
+                    "ipv6_address": v6.get("address"),
+                    "ipv6_mask": v6.get("mask"),
+                    "device": entry.get("l3_device"),
+                    "uptime": entry.get("uptime"),
+                }
+            )
         return {"status": "ok", "interfaces": result}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Get detailed status of a specific network interface.", readOnlyHint=True)
+@mcp.tool(description="Get detailed status for one network interface.")
 async def router_interface_status(interface_name: str) -> dict[str, Any]:
-    """Get detailed status of a specific network interface.
-    
-    Args:
-        interface_name: Interface name (e.g., "lan", "wan", "wlan0")
-        
-    Returns:
-        Dict with: up, ip_address, netmask, gateway, dns, mac_address, rx_bytes, 
-                   tx_bytes, rx_packets, tx_packets, rx_errors, tx_errors
-    """
     try:
-        status = await conn_mgr.call("network.interface", "status", {"interface": interface_name})
+        _require(_INTERFACE_NAME_RE, interface_name, "interface_name")
+        status = await _conn().call(
+            "network.interface", "status", {"interface": interface_name}
+        )
+        v4 = (status.get("ipv4-address") or [{}])[0]
+        route0 = (status.get("route") or [{}])[0]
+        stats = status.get("statistics") or {}
         return {
             "status": "ok",
             "interface": interface_name,
-            "up": status.get("up", False),
-            "ipv4_address": status.get("ipv4_address"),
-            "ipv4_prefix": status.get("ipv4_prefix"),
-            "gateway": status.get("route", [{}])[0].get("target") if status.get("route") else None,
-            "mac_address": status.get("macaddr"),
-            "mtu": status.get("mtu"),
-            "metric": status.get("metric"),
-            "rx_bytes": status.get("statistics", {}).get("rx_bytes"),
-            "tx_bytes": status.get("statistics", {}).get("tx_bytes"),
-            "rx_packets": status.get("statistics", {}).get("rx_packets"),
-            "tx_packets": status.get("statistics", {}).get("tx_packets"),
+            "up": bool(status.get("up")),
+            "proto": status.get("proto"),
+            "ipv4_address": v4.get("address"),
+            "ipv4_mask": v4.get("mask"),
+            "gateway": route0.get("nexthop") or route0.get("target"),
+            "device": status.get("l3_device"),
+            "uptime": status.get("uptime"),
+            "rx_bytes": stats.get("rx_bytes"),
+            "tx_bytes": stats.get("tx_bytes"),
+            "rx_packets": stats.get("rx_packets"),
+            "tx_packets": stats.get("tx_packets"),
         }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Perform a ping test from router to a target host.", readOnlyHint=True)
-async def router_ping_test(target: str, count: int = 4, timeout: int = 5) -> dict[str, Any]:
-    """Ping a target host from the router.
-    
-    Args:
-        target: Target hostname or IP address
-        count: Number of ping packets to send (default: 4)
-        timeout: Timeout in seconds per packet (default: 5)
-        
-    Returns:
-        Dict with: packets_sent, packets_received, packet_loss_percent, min_ms, avg_ms, max_ms
+@mcp.tool(description="Ping a host from the router (count bounded 1-20).")
+async def router_ping_test(target: str, count: int = 4) -> dict[str, Any]:
+    """ICMP ping via rpcd's file.exec.
+
+    Requires the rpcd ACL to grant the agent ``file.exec`` for ``/bin/ping``.
+    Output is parsed to extract loss and RTT stats; full stdout is returned
+    truncated for context efficiency.
     """
     try:
-        result = await conn_mgr.call(
-            "network.device",
-            "status",
-            {"address": target, "count": count, "timeout": timeout},
+        _require_host(target)
+        _require_int_range(count, 1, 20, "count")
+        result = await _conn().call(
+            "file",
+            "exec",
+            {"command": "/bin/ping", "params": ["-c", str(count), "-w", "10", target]},
         )
-        # Parse ping results (format varies by OpenWrt version)
+        stdout = (result.get("stdout") or "")[:4096]
+        loss_match = re.search(r"(\d+)% packet loss", stdout)
+        rtt_match = re.search(
+            r"min/avg/max(?:/mdev)? = ([\d.]+)/([\d.]+)/([\d.]+)", stdout
+        )
         return {
             "status": "ok",
             "target": target,
-            "packets_sent": result.get("packets_sent", count),
-            "packets_received": result.get("packets_received", 0),
-            "min_ms": result.get("min"),
-            "avg_ms": result.get("avg"),
-            "max_ms": result.get("max"),
+            "packets_sent": count,
+            "packet_loss_percent": int(loss_match.group(1)) if loss_match else None,
+            "min_ms": float(rtt_match.group(1)) if rtt_match else None,
+            "avg_ms": float(rtt_match.group(2)) if rtt_match else None,
+            "max_ms": float(rtt_match.group(3)) if rtt_match else None,
+            "exit_code": result.get("code"),
         }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Scan for available WiFi networks (2.4GHz and 5GHz).", readOnlyHint=True)
-async def router_wifi_scan(radio: str = "radio0") -> dict[str, Any]:
-    """Scan for available WiFi networks.
-    
-    Args:
-        radio: Radio device name (default: "radio0", typically wlan0)
-        
-    Returns:
-        List of networks with: ssid, bssid, frequency, signal_strength, encryption, mode
-    """
+@mcp.tool(description="Scan for available WiFi networks on a radio.")
+async def router_wifi_scan(radio: str = "radio0", limit: int = 50) -> dict[str, Any]:
     try:
-        networks = await conn_mgr.call("iwinfo", "scan", {"device": radio})
+        _require(_RADIO_NAME_RE, radio, "radio")
+        _require_int_range(limit, 1, 200, "limit")
+        scan = await _conn().call("iwinfo", "scan", {"device": radio})
+        results = scan.get("results") or []
+        # Sort by signal strength (best first) and truncate for token budget.
+        results.sort(key=lambda n: n.get("signal", -200), reverse=True)
+        networks = [
+            {
+                "ssid": n.get("ssid"),
+                "bssid": n.get("bssid"),
+                "channel": n.get("channel"),
+                "signal_dbm": n.get("signal"),
+                "quality": n.get("quality"),
+                "encryption": (n.get("encryption") or {}).get("description"),
+                "mode": n.get("mode"),
+            }
+            for n in results[:limit]
+        ]
+        return {
+            "status": "ok",
+            "radio": radio,
+            "total_visible": len(results),
+            "returned": len(networks),
+            "networks": networks,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
-        result = []
-        for network in networks.get("results", []):
-            result.append({
-                "ssid": network.get("ssid"),
-                "bssid": network.get("bssid"),
-                "frequency": network.get("frequency"),
-                "signal_strength_dbm": network.get("signal"),
-                "encryption": network.get("encryption"),
-                "mode": network.get("mode"),
-                "channel": network.get("channel"),
-            })
 
-        return {"status": "ok", "radio": radio, "networks": result}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
-
-
-@mcp.tool(description="List connected WiFi clients on the router.", readOnlyHint=True)
+@mcp.tool(description="List currently associated WiFi clients across all radios.")
 async def router_wifi_clients() -> dict[str, Any]:
-    """List all connected WiFi clients.
-    
-    Returns:
-        Dict with list of clients, each containing: mac_address, interface, hostname, 
-                   signal_strength, rx_bytes, tx_bytes, connected_time_seconds
-    """
     try:
-        # Get clients from network device
-        clients_data = await conn_mgr.call("network.device", "status", {"name": "wlan0"})
+        devices = await _conn().call("iwinfo", "devices")
+        names = devices.get("devices") or []
+        clients: list[dict[str, Any]] = []
+        for dev in names:
+            if not isinstance(dev, str) or not _INTERFACE_NAME_RE.fullmatch(dev):
+                continue
+            try:
+                assoc = await _conn().call("iwinfo", "assoclist", {"device": dev})
+            except (UbusError, UbusPermissionError):
+                continue
+            for entry in assoc.get("results") or []:
+                clients.append(
+                    {
+                        "mac_address": entry.get("mac"),
+                        "device": dev,
+                        "signal_dbm": entry.get("signal"),
+                        "noise_dbm": entry.get("noise"),
+                        "inactive_ms": entry.get("inactive"),
+                        "rx_bytes": (entry.get("rx") or {}).get("bytes"),
+                        "tx_bytes": (entry.get("tx") or {}).get("bytes"),
+                    }
+                )
+        return {"status": "ok", "total_clients": len(clients), "clients": clients}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
-        result = []
-        for client in clients_data.get("clients", []):
-            result.append({
-                "mac_address": client.get("mac"),
-                "interface": "wlan0",
-                "hostname": client.get("hostname"),
-                "signal_strength_dbm": client.get("signal"),
-                "rx_bytes": client.get("rx_bytes"),
-                "tx_bytes": client.get("tx_bytes"),
-                "connected_time_seconds": client.get("connected_time"),
-            })
 
-        return {"status": "ok", "total_clients": len(result), "clients": result}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
-
-
-@mcp.tool(description="Get system logs (last N lines).", readOnlyHint=True)
+@mcp.tool(description="Read recent system log entries (lines bounded 1-500).")
 async def router_system_logs(lines: int = 50) -> dict[str, Any]:
-    """Retrieve recent system logs from the router.
-    
-    Args:
-        lines: Number of log lines to retrieve (default: 50)
-        
-    Returns:
-        Dict with log entries as list of strings
-    """
     try:
-        logs = await conn_mgr.call("system", "logs", {"lines": lines})
-        return {"status": "ok", "log_entries": logs.get("log", [])}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require_int_range(lines, 1, 500, "lines")
+        logs = await _conn().call("log", "read", {"lines": lines})
+        entries = logs.get("log") or []
+        if isinstance(entries, str):
+            # Some OpenWrt builds return a single newline-joined blob.
+            entries = entries.splitlines()
+        return {"status": "ok", "log_entries": entries[-lines:]}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
 # ============================================================================
-# UCI CONFIGURATION TOOLS (read-only configuration inspection)
+# UCI INSPECTION
 # ============================================================================
 
 
-@mcp.tool(description="Read UCI configuration value (network, wireless, firewall, etc.).", readOnlyHint=True)
-async def router_uci_get(config: str, section: str, option: str | None = None) -> dict[str, Any]:
-    """Read a UCI configuration value.
-    
-    Args:
-        config: Configuration file (e.g., "network", "wireless", "firewall", "dhcp")
-        section: Section name (e.g., "lan", "wlan0", "zone_wan")
-        option: Optional specific option to retrieve; if omitted, returns entire section
-        
-    Returns:
-        Dict with the configuration value(s)
-    """
+@mcp.tool(description="Read a UCI configuration value (entire section or single option).")
+async def router_uci_get(
+    config: str, section: str, option: str | None = None
+) -> dict[str, Any]:
     try:
-        if option:
-            value = await conn_mgr.call("uci", "get", {"config": config, "section": section, "option": option})
-            return {"status": "ok", "config": config, "section": section, "option": option, "value": value.get("value")}
-        else:
-            section_data = await conn_mgr.call("uci", "get", {"config": config, "section": section})
-            return {"status": "ok", "config": config, "section": section, "data": section_data}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require(_UCI_NAME_RE, config, "config")
+        _require(_UCI_NAME_RE, section, "section")
+        params: dict[str, Any] = {"config": config, "section": section}
+        if option is not None:
+            _require(_UCI_NAME_RE, option, "option")
+            params["option"] = option
+        data = await _conn().call("uci", "get", params)
+        if option is not None:
+            return {
+                "status": "ok",
+                "config": config,
+                "section": section,
+                "option": option,
+                "value": data.get("value"),
+            }
+        return {"status": "ok", "config": config, "section": section, "data": data}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="List all sections in a UCI configuration file.", readOnlyHint=True)
+@mcp.tool(description="List section names in a UCI configuration file.")
 async def router_uci_sections(config: str) -> dict[str, Any]:
-    """List all sections in a UCI configuration file.
-    
-    Args:
-        config: Configuration file (e.g., "network", "wireless", "firewall")
-        
-    Returns:
-        Dict with list of section names
-    """
     try:
-        sections = await conn_mgr.call("uci", "sections", {"config": config})
-        return {"status": "ok", "config": config, "sections": sections.get("sections", [])}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require(_UCI_NAME_RE, config, "config")
+        data = await _conn().call("uci", "get", {"config": config})
+        sections = data.get("values") if isinstance(data.get("values"), dict) else data
+        names = list(sections.keys()) if isinstance(sections, dict) else []
+        return {"status": "ok", "config": config, "sections": names}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
 # ============================================================================
-# DESTRUCTIVE CONFIGURATION TOOLS (two-phase commits with validation)
+# UCI MUTATION (two-phase + confirmed commit)
 # ============================================================================
 
 
-@mcp.tool(description="Set a UCI configuration value with two-phase commit (set → validate → commit).", destructiveHint=True)
-async def router_uci_set(config: str, section: str, option: str, value: str) -> dict[str, Any]:
-    """Set a UCI configuration value with staged commit.
-    
-    Two-phase process:
-    1. Stage the change (set in pending)
-    2. Validate syntax
-    3. Commit to active config
-    
-    Args:
-        config: Configuration file (e.g., "network", "wireless", "firewall")
-        section: Section name
-        option: Option name
-        value: New value (will be coerced to string)
-        
-    Returns:
-        Dict with status and result of staged commit
-    """
+@mcp.tool(
+    description=(
+        "Stage a UCI option change (does NOT apply). Call router_uci_commit to "
+        "persist, or router_uci_revert to discard."
+    )
+)
+async def router_uci_set(
+    config: str, section: str, option: str, value: str
+) -> dict[str, Any]:
     try:
-        # Phase 1: Stage the change
-        set_result = await conn_mgr.call(
+        _require(_UCI_NAME_RE, config, "config")
+        _require(_UCI_NAME_RE, section, "section")
+        _require(_UCI_NAME_RE, option, "option")
+        if not isinstance(value, str) or len(value) > 1024:
+            raise ValidationError("value must be a string of <=1024 chars")
+        await _conn().call(
             "uci",
             "set",
-            {"config": config, "section": section, "option": option, "value": str(value)},
+            {
+                "config": config,
+                "section": section,
+                "values": {option: value},
+            },
         )
-
-        if not set_result.get("success"):
-            return {"status": "error", "reason": "Failed to stage configuration change"}
-
-        # Phase 2: Validate staged config
-        validate_result = await conn_mgr.call("uci", "changes", {"config": config})
-
-        # Phase 3: Commit
-        commit_result = await conn_mgr.call("uci", "commit", {"config": config})
-
-        if not commit_result.get("success"):
-            # Attempt revert on commit failure
-            await conn_mgr.call("uci", "revert", {"config": config})
-            return {
-                "status": "error",
-                "reason": "Commit failed, changes reverted",
-                "staged_changes": validate_result,
-            }
-
+        # uci.set returns an empty dict on success — absence of an exception
+        # is the success signal.
         return {
             "status": "ok",
             "config": config,
             "section": section,
             "option": option,
             "value": value,
-            "committed": True,
+            "staged": True,
+            "next_step": "router_uci_commit",
         }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Revert uncommitted UCI changes for a configuration file.", destructiveHint=True)
+@mcp.tool(description="List staged UCI changes for a configuration file.")
+async def router_uci_changes(config: str) -> dict[str, Any]:
+    try:
+        _require(_UCI_NAME_RE, config, "config")
+        data = await _conn().call("uci", "changes", {"config": config})
+        return {"status": "ok", "config": config, "changes": data.get("changes", [])}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
+
+
+@mcp.tool(
+    description=(
+        "Commit staged UCI changes. If confirm_timeout_seconds > 0, an auto-revert "
+        "is scheduled and you must call router_uci_confirm with the returned commit_id "
+        "before the timeout to make the change permanent. This protects against an "
+        "agent severing its own connectivity."
+    )
+)
+async def router_uci_commit(
+    config: str, confirm_timeout_seconds: int = 0
+) -> dict[str, Any]:
+    try:
+        _require(_UCI_NAME_RE, config, "config")
+        _require_int_range(confirm_timeout_seconds, 0, 600, "confirm_timeout_seconds")
+
+        # Snapshot the changes before commit so we can echo them back.
+        try:
+            changes_data = await _conn().call("uci", "changes", {"config": config})
+        except UbusError:
+            changes_data = {}
+
+        await _conn().call("uci", "commit", {"config": config})
+
+        if confirm_timeout_seconds == 0:
+            return {
+                "status": "ok",
+                "config": config,
+                "committed": True,
+                "confirmed": True,
+                "changes": changes_data.get("changes", []),
+            }
+
+        commit_id = f"commit-{next(_commit_id_counter)}"
+        revert_at = datetime.now(timezone.utc) + timedelta(seconds=confirm_timeout_seconds)
+        task = asyncio.create_task(
+            _schedule_auto_revert(_conn(), commit_id, config, confirm_timeout_seconds)
+        )
+        async with _pending_commits_lock:
+            _pending_commits[commit_id] = _PendingCommit(
+                commit_id=commit_id, config=config, revert_at=revert_at, task=task
+            )
+        return {
+            "status": "ok",
+            "config": config,
+            "committed": True,
+            "confirmed": False,
+            "commit_id": commit_id,
+            "confirm_by": revert_at.isoformat(),
+            "changes": changes_data.get("changes", []),
+            "next_step": "router_uci_confirm",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
+
+
+@mcp.tool(description="Confirm a pending commit before its auto-revert timeout fires.")
+async def router_uci_confirm(commit_id: str) -> dict[str, Any]:
+    try:
+        if not isinstance(commit_id, str) or not commit_id.startswith("commit-"):
+            raise ValidationError("commit_id must be returned by router_uci_commit")
+        async with _pending_commits_lock:
+            pending = _pending_commits.pop(commit_id, None)
+        if pending is None:
+            return _error_response(
+                ERR_CONFIRMED_COMMIT_TIMEOUT,
+                f"commit_id {commit_id} not found (may have expired and reverted)",
+            )
+        pending.task.cancel()
+        return {
+            "status": "ok",
+            "commit_id": commit_id,
+            "config": pending.config,
+            "confirmed": True,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
+
+
+@mcp.tool(description="Discard staged UCI changes that have not yet been committed.")
 async def router_uci_revert(config: str) -> dict[str, Any]:
-    """Revert uncommitted UCI changes.
-    
-    Args:
-        config: Configuration file to revert (e.g., "network", "wireless")
-        
-    Returns:
-        Dict with status of revert operation
-    """
     try:
-        result = await conn_mgr.call("uci", "revert", {"config": config})
-        return {"status": "ok", "config": config, "reverted": result.get("success", False)}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require(_UCI_NAME_RE, config, "config")
+        await _conn().call("uci", "revert", {"config": config})
+        return {"status": "ok", "config": config, "reverted": True}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Restart a network interface (bring down and up).", destructiveHint=True)
+# ============================================================================
+# NETWORK / FIREWALL / SERVICE OPERATIONS
+# ============================================================================
+
+
+@mcp.tool(description="Restart a network interface (brings it down then up).")
 async def router_interface_restart(interface_name: str) -> dict[str, Any]:
-    """Restart a network interface.
-    
-    Args:
-        interface_name: Interface name to restart (e.g., "lan", "wan", "wlan0")
-        
-    Returns:
-        Dict with status of restart operation
-    """
     try:
-        result = await conn_mgr.call("network.interface", "restart", {"interface": interface_name})
-        return {"status": "ok", "interface": interface_name, "restarted": result.get("success", False)}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require(_INTERFACE_NAME_RE, interface_name, "interface_name")
+        await _conn().call("network.interface", "down", {"interface": interface_name})
+        await _conn().call("network.interface", "up", {"interface": interface_name})
+        return {"status": "ok", "interface": interface_name, "restarted": True}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Add a firewall rule.", destructiveHint=True)
+@mcp.tool(description="Add a firewall rule via UCI (stages; commit firewall separately).")
 async def router_firewall_rule_add(
     name: str,
     src_zone: str,
@@ -571,189 +824,172 @@ async def router_firewall_rule_add(
     proto: str | None = None,
     dest_port: str | None = None,
 ) -> dict[str, Any]:
-    """Add a firewall rule to the router.
-    
-    Args:
-        name: Rule name (unique identifier)
-        src_zone: Source zone (e.g., "lan", "wan", "guest")
-        dest_zone: Destination zone (e.g., "lan", "wan", "guest")
-        target: Target action (ACCEPT, DROP, REJECT, default: ACCEPT)
-        proto: Protocol filter (tcp, udp, icmp, all; optional)
-        dest_port: Destination port(s) (e.g., "80", "80,443"; optional)
-        
-    Returns:
-        Dict with status and rule details
-    """
     try:
-        params = {
+        _require(_RULE_NAME_RE, name, "name")
+        _require(_UCI_NAME_RE, src_zone, "src_zone")
+        _require(_UCI_NAME_RE, dest_zone, "dest_zone")
+        _require_in(_FIREWALL_TARGETS, target, "target")
+        values: dict[str, Any] = {
             "name": name,
             "src": src_zone,
             "dest": dest_zone,
             "target": target,
         }
-        if proto:
-            params["proto"] = proto
-        if dest_port:
-            params["dest_port"] = dest_port
+        if proto is not None:
+            values["proto"] = _require_in(_FIREWALL_PROTOS, proto, "proto")
+        if dest_port is not None:
+            _require(_PORT_LIST_RE, dest_port, "dest_port")
+            values["dest_port"] = dest_port
 
-        result = await conn_mgr.call("luci.network.firewall", "add_rule", params)
+        # Use UCI add+set rather than the LuCI namespace (which is not part of
+        # core rpcd and is gated by additional ACLs).
+        added = await _conn().call("uci", "add", {"config": "firewall", "type": "rule", "name": name})
+        section = added.get("section") or name
+        await _conn().call(
+            "uci",
+            "set",
+            {"config": "firewall", "section": section, "values": values},
+        )
         return {
             "status": "ok",
             "rule_name": name,
-            "src_zone": src_zone,
-            "dest_zone": dest_zone,
-            "target": target,
-            "added": result.get("success", False),
+            "section": section,
+            "staged": True,
+            "next_step": "router_uci_commit(config='firewall')",
         }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Delete a firewall rule by name.", destructiveHint=True)
+@mcp.tool(description="Delete a firewall rule section by name.")
 async def router_firewall_rule_delete(rule_name: str) -> dict[str, Any]:
-    """Delete a firewall rule.
-    
-    Args:
-        rule_name: Name of the rule to delete
-        
-    Returns:
-        Dict with status of deletion
-    """
     try:
-        result = await conn_mgr.call("luci.network.firewall", "delete_rule", {"name": rule_name})
-        return {"status": "ok", "rule_name": rule_name, "deleted": result.get("success", False)}
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require(_RULE_NAME_RE, rule_name, "rule_name")
+        await _conn().call(
+            "uci", "delete", {"config": "firewall", "section": rule_name}
+        )
+        return {
+            "status": "ok",
+            "rule_name": rule_name,
+            "staged": True,
+            "next_step": "router_uci_commit(config='firewall')",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="List all firewall rules and zones.", readOnlyHint=True)
+@mcp.tool(description="List firewall zones and rules from the active configuration.")
 async def router_firewall_rules() -> dict[str, Any]:
-    """List all firewall rules and zones.
-    
-    Returns:
-        Dict with zones and rules
-    """
     try:
-        result = await conn_mgr.call("luci.network.firewall", "get_rules", {})
-        return {
-            "status": "ok",
-            "zones": result.get("zones", []),
-            "rules": result.get("rules", []),
-        }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        data = await _conn().call("uci", "get", {"config": "firewall"})
+        sections = data.get("values") if isinstance(data.get("values"), dict) else data
+        zones = []
+        rules = []
+        if isinstance(sections, dict):
+            for name, section in sections.items():
+                if not isinstance(section, dict):
+                    continue
+                stype = section.get(".type")
+                if stype == "zone":
+                    zones.append({"name": name, **{k: v for k, v in section.items() if not k.startswith(".")}})
+                elif stype == "rule":
+                    rules.append({"name": name, **{k: v for k, v in section.items() if not k.startswith(".")}})
+        return {"status": "ok", "zones": zones, "rules": rules}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-# ============================================================================
-# SERVICE MANAGEMENT (restart services like dnsmasq, firewall, etc.)
-# ============================================================================
-
-
-@mcp.tool(description="Reload a system service (dnsmasq, firewall, etc.).", destructiveHint=True)
+@mcp.tool(description="Reload (signal) a system service.")
 async def router_service_reload(service: str) -> dict[str, Any]:
-    """Reload (restart) a system service.
-    
-    Args:
-        service: Service name (e.g., "dnsmasq", "firewall", "network")
-        
-    Returns:
-        Dict with status of reload operation
-    """
     try:
-        result = await conn_mgr.call("service", "reload", {"name": service})
-        return {
-            "status": "ok",
-            "service": service,
-            "reloaded": result.get("success", False),
-        }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require(_SERVICE_NAME_RE, service, "service")
+        await _conn().call("service", "event", {"type": "reload", "data": {"name": service}})
+        return {"status": "ok", "service": service, "reloaded": True}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
 # ============================================================================
-# PACKAGE MANAGEMENT (opkg operations)
+# PACKAGE MANAGEMENT (read-mostly, install gated to ACL)
 # ============================================================================
 
 
-@mcp.tool(description="List installed packages on the router.", readOnlyHint=True)
-async def router_packages_list(filter_name: str | None = None) -> dict[str, Any]:
-    """List installed packages.
-    
-    Args:
-        filter_name: Optional package name filter (substring search)
-        
-    Returns:
-        Dict with list of packages and versions
-    """
+@mcp.tool(
+    description="List installed packages with pagination (offset, limit bounded 1-500)."
+)
+async def router_packages_list(
+    filter_name: str | None = None, offset: int = 0, limit: int = 100
+) -> dict[str, Any]:
     try:
-        result = await conn_mgr.call("opkg", "list", {})
-        packages = result.get("packages", [])
-
+        _require_int_range(offset, 0, 10_000, "offset")
+        _require_int_range(limit, 1, 500, "limit")
+        if filter_name is not None:
+            _require(_PACKAGE_NAME_RE, filter_name, "filter_name")
+        data = await _conn().call("opkg", "list_installed", {})
+        packages = data.get("packages") or []
         if filter_name:
-            packages = [p for p in packages if filter_name.lower() in p.get("name", "").lower()]
-
+            packages = [
+                p for p in packages if filter_name.lower() in (p.get("name") or "").lower()
+            ]
+        total = len(packages)
+        window = packages[offset : offset + limit]
         return {
             "status": "ok",
-            "total": len(packages),
-            "packages": packages,
+            "total": total,
+            "offset": offset,
+            "returned": len(window),
+            "packages": window,
         }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Search for a package in opkg repository.", readOnlyHint=True)
-async def router_packages_search(query: str) -> dict[str, Any]:
-    """Search for packages in the repository.
-    
-    Args:
-        query: Package name or description to search for
-        
-    Returns:
-        Dict with matching packages
-    """
+@mcp.tool(description="Search the opkg repository for matching package names.")
+async def router_packages_search(query: str, limit: int = 50) -> dict[str, Any]:
     try:
-        result = await conn_mgr.call("opkg", "search", {"query": query})
-        return {
-            "status": "ok",
-            "query": query,
-            "results": result.get("packages", []),
-        }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require(_PACKAGE_NAME_RE, query, "query")
+        _require_int_range(limit, 1, 200, "limit")
+        data = await _conn().call("opkg", "find", {"pattern": query})
+        packages = (data.get("packages") or [])[:limit]
+        return {"status": "ok", "query": query, "results": packages}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-@mcp.tool(description="Install a package via opkg (network must be accessible).", destructiveHint=True)
+@mcp.tool(description="Install a package via opkg (requires ACL write.ubus.opkg).")
 async def router_package_install(package_name: str) -> dict[str, Any]:
-    """Install a package.
-    
-    Args:
-        package_name: Package name to install
-        
-    Returns:
-        Dict with status of installation
-    """
     try:
-        result = await conn_mgr.call("opkg", "install", {"package": package_name})
-        return {
-            "status": "ok",
-            "package": package_name,
-            "installed": result.get("success", False),
-        }
-    except (PermissionError, RuntimeError) as exc:
-        return {"status": "error", "reason": str(exc)}
+        _require(_PACKAGE_NAME_RE, package_name, "package_name")
+        await _conn().call("opkg", "install", {"package": package_name})
+        return {"status": "ok", "package": package_name, "installed": True}
+    except Exception as exc:  # noqa: BLE001
+        return _handle(exc)
 
 
-async def main() -> None:
-    """Start the FastMCP server on port 8002."""
-    print(f"Starting OpenWrt Router MCP Server on port {ROUTER_MCP_PORT}...")
-    print(f"Router endpoint: {ROUTER_ENDPOINT}")
-    await mcp.run(port=ROUTER_MCP_PORT)
+# ============================================================================
+# Entrypoint
+# ============================================================================
+
+
+async def _serve() -> None:
+    logger.info("Starting OpenWrt Router MCP server on port %d", ROUTER_MCP_PORT)
+    logger.info("Router endpoint: %s://%s:%d/ubus", ROUTER_SCHEME, ROUTER_HOST, ROUTER_PORT)
+    try:
+        await mcp.run_async(transport="http", host="0.0.0.0", port=ROUTER_MCP_PORT)
+    finally:
+        await _conn_mgr.close()
+
+
+def main() -> None:
+    logging.basicConfig(
+        level=os.environ.get("FORGE_LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    try:
+        asyncio.run(_serve())
+    except KeyboardInterrupt:
+        logger.info("Router MCP server stopped by user.")
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\nServer stopped.")
-    finally:
-        asyncio.run(conn_mgr.close())
+    main()
