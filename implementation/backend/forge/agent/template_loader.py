@@ -53,8 +53,14 @@ class TemplateLoader:
                 eos_token="",
             )
         except TemplateError as exc:
-            logger.warning("Chat template rendering failed for %s; using simple fallback: %s", model_name, exc)
-            return self._simple_format(normalized_messages, tools or [], add_generation_prompt)
+            logger.warning(
+                "Chat template rendering failed for %s; using simple fallback: %s",
+                model_name,
+                exc,
+            )
+            return self._simple_format(
+                normalized_messages, tools or [], add_generation_prompt
+            )
 
     async def get_model_info(self, model_name: str) -> dict:
         """Fetch Ollama model metadata and cache the relevant template information."""
@@ -64,11 +70,15 @@ class TemplateLoader:
         data: dict[str, Any] = {}
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                response = await client.request("GET", f"{self.ollama_base_url}/api/show", json={"name": model_name})
+                response = await client.request(
+                    "GET", f"{self.ollama_base_url}/api/show", json={"name": model_name}
+                )
                 response.raise_for_status()
                 data = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            logger.warning("Unable to fetch Ollama template metadata for %s: %s", model_name, exc)
+            logger.warning(
+                "Unable to fetch Ollama template metadata for %s: %s", model_name, exc
+            )
 
         info = {
             "model_name": model_name,
@@ -94,7 +104,9 @@ class TemplateLoader:
         if "content" not in normalized or normalized["content"] is None:
             normalized["content"] = ""
         if normalized.get("tool_calls"):
-            normalized["tool_calls"] = [self._normalize_tool_call(call) for call in normalized["tool_calls"]]
+            normalized["tool_calls"] = [
+                self._normalize_tool_call(call) for call in normalized["tool_calls"]
+            ]
         return normalized
 
     def _normalize_tool_call(self, tool_call: dict) -> dict[str, Any]:
@@ -108,7 +120,9 @@ class TemplateLoader:
             },
         }
 
-    def _simple_format(self, messages: list[dict], tools: list[dict], add_generation_prompt: bool) -> str:
+    def _simple_format(
+        self, messages: list[dict], tools: list[dict], add_generation_prompt: bool
+    ) -> str:
         parts: list[str] = []
         if tools:
             parts.append("tools: " + repr(tools))
@@ -118,7 +132,9 @@ class TemplateLoader:
             parts.append(f"{role}: {content}")
             for call in message.get("tool_calls") or []:
                 fn = call.get("function", {})
-                parts.append(f"assistant_tool_call: {fn.get('name', '')} {fn.get('arguments', '{}')}")
+                parts.append(
+                    f"assistant_tool_call: {fn.get('name', '')} {fn.get('arguments', '{}')}"
+                )
             if role == "tool":
                 parts.append(f"tool_call_id: {message.get('tool_call_id', '')}")
         if add_generation_prompt:

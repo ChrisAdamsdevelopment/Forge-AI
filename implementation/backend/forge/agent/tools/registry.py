@@ -5,10 +5,30 @@ import json
 from typing import Any
 
 from forge.agent.tools.apps import app_focus, app_list_windows, app_open
-from forge.agent.tools.browser import browser_click, browser_get_content, browser_navigate, browser_screenshot, browser_type
-from forge.agent.tools.filesystem import file_delete, file_list, file_mkdir, file_read, file_search, file_write
+from forge.agent.tools.browser import (
+    browser_click,
+    browser_get_content,
+    browser_navigate,
+    browser_screenshot,
+    browser_type,
+)
+from forge.agent.tools.filesystem import (
+    file_delete,
+    file_list,
+    file_mkdir,
+    file_read,
+    file_search,
+    file_write,
+)
 from forge.agent.tools.memory import memory_retrieve, memory_store
-from forge.agent.tools.screen import keyboard_press, keyboard_type, mouse_click, mouse_move, mouse_position, screen_capture
+from forge.agent.tools.screen import (
+    keyboard_press,
+    keyboard_type,
+    mouse_click,
+    mouse_move,
+    mouse_position,
+    screen_capture,
+)
 from forge.agent.tools.session_tools import mark_session_good
 from forge.agent.tools.spotify import (
     spotify_navigate_home,
@@ -86,9 +106,14 @@ def list_tools() -> list[dict[str, Any]]:
         properties: dict[str, Any] = {}
         required: list[str] = []
         for param_name, param in sig.parameters.items():
-            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            if param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
                 continue
-            annotation = param.annotation if param.annotation is not inspect._empty else str
+            annotation = (
+                param.annotation if param.annotation is not inspect._empty else str
+            )
             prop = _to_json_schema(annotation)
             if param.default is not inspect._empty:
                 prop["default"] = param.default
@@ -113,7 +138,9 @@ def list_tools() -> list[dict[str, Any]]:
     return schemas
 
 
-async def execute(name: str, arguments: dict[str, Any] | str | None = None) -> dict[str, Any]:
+async def execute(
+    name: str, arguments: dict[str, Any] | str | None = None
+) -> dict[str, Any]:
     fn = get_tool(name)
     if fn is None:
         return {"error": f"Unknown tool: {name}"}

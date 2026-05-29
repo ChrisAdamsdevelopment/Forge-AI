@@ -13,7 +13,9 @@ from forge.core.config import settings
 
 
 class EvalService:
-    def __init__(self, tasks_file: Path | None = None, results_file: Path | None = None) -> None:
+    def __init__(
+        self, tasks_file: Path | None = None, results_file: Path | None = None
+    ) -> None:
         self._tasks_file = tasks_file or Path("eval/golden_tasks.yaml")
         self._results_file = results_file or (settings.data_dir / "eval_results.json")
 
@@ -40,12 +42,14 @@ class EvalService:
             duration = time.monotonic() - started
 
             assistant_messages = [m for m in messages if m.get("role") == "assistant"]
-            final_assistant = assistant_messages[-1] if assistant_messages else {"content": ""}
+            final_assistant = (
+                assistant_messages[-1] if assistant_messages else {"content": ""}
+            )
             response_text = (final_assistant.get("content") or "").strip()
 
             all_tool_names: list[str] = []
             for m in messages:
-                for tool_call in (m.get("tool_calls") or []):
+                for tool_call in m.get("tool_calls") or []:
                     fn = tool_call.get("function", {})
                     name = fn.get("name")
                     if name:
@@ -56,20 +60,48 @@ class EvalService:
 
             for needle in expected.get("contains", []) or []:
                 passed = needle.lower() in response_text.lower()
-                assertions.append({"type": "contains", "expected": needle, "actual": response_text, "passed": passed})
+                assertions.append(
+                    {
+                        "type": "contains",
+                        "expected": needle,
+                        "actual": response_text,
+                        "passed": passed,
+                    }
+                )
 
             for needle in expected.get("not_contains", []) or []:
                 passed = needle.lower() not in response_text.lower()
-                assertions.append({"type": "not_contains", "expected": needle, "actual": response_text, "passed": passed})
+                assertions.append(
+                    {
+                        "type": "not_contains",
+                        "expected": needle,
+                        "actual": response_text,
+                        "passed": passed,
+                    }
+                )
 
             for tool_name in expected.get("tool_calls_include", []) or []:
                 passed = tool_name in all_tool_names
-                assertions.append({"type": "tool_calls_include", "expected": tool_name, "actual": all_tool_names, "passed": passed})
+                assertions.append(
+                    {
+                        "type": "tool_calls_include",
+                        "expected": tool_name,
+                        "actual": all_tool_names,
+                        "passed": passed,
+                    }
+                )
 
             max_duration = expected.get("max_duration_seconds")
             if max_duration is not None:
                 passed = duration <= float(max_duration)
-                assertions.append({"type": "max_duration_seconds", "expected": max_duration, "actual": round(duration, 4), "passed": passed})
+                assertions.append(
+                    {
+                        "type": "max_duration_seconds",
+                        "expected": max_duration,
+                        "actual": round(duration, 4),
+                        "passed": passed,
+                    }
+                )
 
             task_passed = all(a["passed"] for a in assertions) if assertions else True
             results.append(

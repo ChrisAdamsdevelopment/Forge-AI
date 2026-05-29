@@ -43,20 +43,26 @@ class ChatTemplateEngine:
 
         system_messages = [msg for msg in messages if msg.get("role") == "system"]
         non_system = [msg for msg in messages if msg.get("role") != "system"]
-        last_user = next((msg for msg in reversed(non_system) if msg.get("role") == "user"), None)
+        last_user = next(
+            (msg for msg in reversed(non_system) if msg.get("role") == "user"), None
+        )
 
         kept: list[dict[str, Any]] = list(system_messages)
         if system_prompt and not system_messages:
             kept.append({"role": "system", "content": system_prompt})
 
-        budget_text = await self.format_messages(model_name, kept, tools=None, add_generation_prompt=False)
+        budget_text = await self.format_messages(
+            model_name, kept, tools=None, add_generation_prompt=False
+        )
         budget_used = await self.estimate_tokens(budget_text)
         remaining_budget = max_tokens - budget_used
 
         newest_first = list(reversed(non_system))
         selected: list[dict] = []
         for message in newest_first:
-            candidate_text = await self.format_messages(model_name, [message], tools=None, add_generation_prompt=False)
+            candidate_text = await self.format_messages(
+                model_name, [message], tools=None, add_generation_prompt=False
+            )
             candidate_tokens = await self.estimate_tokens(candidate_text)
             if candidate_tokens <= remaining_budget or message is last_user:
                 selected.append(message)

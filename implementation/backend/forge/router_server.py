@@ -8,8 +8,6 @@ All tools enforce least-privilege ACLs on the router side.
 from __future__ import annotations
 
 import asyncio
-import json
-import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -22,15 +20,16 @@ from fastmcp import FastMCP
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from forge.config import FASTAPI_PORT
 
 # Configuration
-ROUTER_HOST = "192.168.1.1"
-ROUTER_PORT = 80
+import os as _os
+
+ROUTER_HOST = _os.environ.get("ROUTER_HOST", "192.168.1.1")
+ROUTER_PORT = int(_os.environ.get("ROUTER_PORT", "80"))
 ROUTER_ENDPOINT = f"http://{ROUTER_HOST}:{ROUTER_PORT}/ubus"
-ROUTER_USERNAME = "root"
-ROUTER_PASSWORD = None  # Set via environment or config
-ROUTER_MCP_PORT = 8002
+ROUTER_USERNAME = _os.environ.get("ROUTER_USERNAME", "root")
+ROUTER_PASSWORD = _os.environ.get("ROUTER_PASSWORD", None)
+ROUTER_MCP_PORT = int(_os.environ.get("ROUTER_MCP_PORT", "8002"))
 REQUEST_TIMEOUT = 30.0
 
 # UBUS JSON-RPC constants
@@ -63,7 +62,7 @@ STATUS_MESSAGES = {
 
 class ConnectionManager:
     """Manages authenticated UBUS JSON-RPC sessions with token caching and auto-refresh.
-    
+
     Handles session.login, token caching, expiry tracking, and automatic refresh.
     Translates UBUS errors into structured exceptions.
     """
@@ -77,7 +76,7 @@ class ConnectionManager:
         timeout: float = REQUEST_TIMEOUT,
     ):
         """Initialize connection manager.
-        
+
         Args:
             host: Router IP address (default: 192.168.1.1)
             port: HTTP port (default: 80)
@@ -105,10 +104,10 @@ class ConnectionManager:
 
     async def _login(self) -> str:
         """Authenticate and retrieve session token.
-        
+
         Returns:
             UBUS session token
-            
+
         Raises:
             RuntimeError: If authentication fails
         """
@@ -117,7 +116,12 @@ class ConnectionManager:
             "jsonrpc": "2.0",
             "id": 1,
             "method": "call",
-            "params": ["00000000000000000000000000000000", "session", "login", {"username": self.username, "password": self.password}],
+            "params": [
+                "00000000000000000000000000000000",
+                "session",
+                "login",
+                {"username": self.username, "password": self.password},
+            ],
         }
 
         try:
@@ -127,11 +131,15 @@ class ConnectionManager:
 
             if data.get("result", [None])[0] != UBUS_STATUS_OK:
                 status = data.get("result", [1])[0]
-                raise RuntimeError(f"Login failed: {STATUS_MESSAGES.get(status, 'Unknown error')}")
+                raise RuntimeError(
+                    f"Login failed: {STATUS_MESSAGES.get(status, 'Unknown error')}"
+                )
 
             result = data.get("result", [None, {}])[1]
             self._session_token = result.get("ubus_rpc_session")
-            self._token_expiry = datetime.now() + timedelta(hours=1)  # Typical session timeout
+            self._token_expiry = datetime.now() + timedelta(
+                hours=1
+            )  # Typical session timeout
 
             return self._session_token
         except httpx.HTTPError as exc:
@@ -139,7 +147,7 @@ class ConnectionManager:
 
     async def _ensure_authenticated(self) -> str:
         """Ensure valid session token, refreshing if needed.
-        
+
         Returns:
             Valid UBUS session token
         """
@@ -159,15 +167,15 @@ class ConnectionManager:
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Call a UBUS RPC method.
-        
+
         Args:
             namespace: UBUS namespace (e.g., "system", "network.interface")
             method: Method name (e.g., "info", "status")
             params: Optional parameters dict
-            
+
         Returns:
             Result data dict
-            
+
         Raises:
             PermissionError: If UBUS_STATUS_PERMISSION_DENIED
             RuntimeError: For other UBUS errors
@@ -196,7 +204,9 @@ class ConnectionManager:
             elif status == UBUS_STATUS_PERMISSION_DENIED:
                 raise PermissionError(f"Permission denied for {namespace}.{method}")
             else:
-                raise RuntimeError(f"UBUS error {status}: {STATUS_MESSAGES.get(status, 'Unknown error')}")
+                raise RuntimeError(
+                    f"UBUS error {status}: {STATUS_MESSAGES.get(status, 'Unknown error')}"
+                )
         except httpx.HTTPError as exc:
             raise RuntimeError(f"HTTP error calling {namespace}.{method}: {exc}")
 
@@ -216,12 +226,15 @@ conn_mgr = ConnectionManager(password=ROUTER_PASSWORD)
 # ============================================================================
 
 
-@mcp.tool(description="Get router system information: board name, firmware, uptime, CPU load.", readOnlyHint=True)
+@mcp.tool(
+    description="Get router system information: board name, firmware, uptime, CPU load.",
+    annotations={"readOnlyHint": True},
+)
 async def router_system_info() -> dict[str, Any]:
     """Retrieve system information from the router.
-    
+
     Returns:
-        Dict with: board_name, firmware_version, kernel_version, uptime_seconds, 
+        Dict with: board_name, firmware_version, kernel_version, uptime_seconds,
                    cpu_count, memory_total_kb, memory_free_kb, load_1min, load_5min, load_15min
     """
     try:
@@ -248,12 +261,15 @@ async def router_system_info() -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="List all network interfaces with current status (up/down) and IP addresses.", readOnlyHint=True)
+@mcp.tool(
+    description="List all network interfaces with current status (up/down) and IP addresses.",
+    annotations={"readOnlyHint": True},
+)
 async def router_network_list() -> dict[str, Any]:
     """List all network interfaces on the router.
-    
+
     Returns:
-        Dict with list of interfaces, each containing: name, status, ip_address, 
+        Dict with list of interfaces, each containing: name, status, ip_address,
                    netmask, gateway, dns_servers, mac_address, mtu, type (lan/wan)
     """
     try:
@@ -262,18 +278,22 @@ async def router_network_list() -> dict[str, Any]:
         result = []
         for iface_name in interfaces.get("interface", []):
             try:
-                status = await conn_mgr.call("network.interface", "status", {"interface": iface_name})
-                result.append({
-                    "name": iface_name,
-                    "up": status.get("up", False),
-                    "ipv4_address": status.get("ipv4_address"),
-                    "ipv4_prefix": status.get("ipv4_prefix"),
-                    "ipv6_address": status.get("ipv6_address"),
-                    "ipv6_prefix": status.get("ipv6_prefix"),
-                    "mac_address": status.get("macaddr"),
-                    "mtu": status.get("mtu"),
-                    "type": status.get("interface_type", "unknown"),
-                })
+                status = await conn_mgr.call(
+                    "network.interface", "status", {"interface": iface_name}
+                )
+                result.append(
+                    {
+                        "name": iface_name,
+                        "up": status.get("up", False),
+                        "ipv4_address": status.get("ipv4_address"),
+                        "ipv4_prefix": status.get("ipv4_prefix"),
+                        "ipv6_address": status.get("ipv6_address"),
+                        "ipv6_prefix": status.get("ipv6_prefix"),
+                        "mac_address": status.get("macaddr"),
+                        "mtu": status.get("mtu"),
+                        "type": status.get("interface_type", "unknown"),
+                    }
+                )
             except (PermissionError, RuntimeError):
                 pass
 
@@ -282,26 +302,33 @@ async def router_network_list() -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Get detailed status of a specific network interface.", readOnlyHint=True)
+@mcp.tool(
+    description="Get detailed status of a specific network interface.",
+    annotations={"readOnlyHint": True},
+)
 async def router_interface_status(interface_name: str) -> dict[str, Any]:
     """Get detailed status of a specific network interface.
-    
+
     Args:
         interface_name: Interface name (e.g., "lan", "wan", "wlan0")
-        
+
     Returns:
-        Dict with: up, ip_address, netmask, gateway, dns, mac_address, rx_bytes, 
+        Dict with: up, ip_address, netmask, gateway, dns, mac_address, rx_bytes,
                    tx_bytes, rx_packets, tx_packets, rx_errors, tx_errors
     """
     try:
-        status = await conn_mgr.call("network.interface", "status", {"interface": interface_name})
+        status = await conn_mgr.call(
+            "network.interface", "status", {"interface": interface_name}
+        )
         return {
             "status": "ok",
             "interface": interface_name,
             "up": status.get("up", False),
             "ipv4_address": status.get("ipv4_address"),
             "ipv4_prefix": status.get("ipv4_prefix"),
-            "gateway": status.get("route", [{}])[0].get("target") if status.get("route") else None,
+            "gateway": status.get("route", [{}])[0].get("target")
+            if status.get("route")
+            else None,
             "mac_address": status.get("macaddr"),
             "mtu": status.get("mtu"),
             "metric": status.get("metric"),
@@ -314,15 +341,20 @@ async def router_interface_status(interface_name: str) -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Perform a ping test from router to a target host.", readOnlyHint=True)
-async def router_ping_test(target: str, count: int = 4, timeout: int = 5) -> dict[str, Any]:
+@mcp.tool(
+    description="Perform a ping test from router to a target host.",
+    annotations={"readOnlyHint": True},
+)
+async def router_ping_test(
+    target: str, count: int = 4, timeout: int = 5
+) -> dict[str, Any]:
     """Ping a target host from the router.
-    
+
     Args:
         target: Target hostname or IP address
         count: Number of ping packets to send (default: 4)
         timeout: Timeout in seconds per packet (default: 5)
-        
+
     Returns:
         Dict with: packets_sent, packets_received, packet_loss_percent, min_ms, avg_ms, max_ms
     """
@@ -346,13 +378,16 @@ async def router_ping_test(target: str, count: int = 4, timeout: int = 5) -> dic
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Scan for available WiFi networks (2.4GHz and 5GHz).", readOnlyHint=True)
+@mcp.tool(
+    description="Scan for available WiFi networks (2.4GHz and 5GHz).",
+    annotations={"readOnlyHint": True},
+)
 async def router_wifi_scan(radio: str = "radio0") -> dict[str, Any]:
     """Scan for available WiFi networks.
-    
+
     Args:
         radio: Radio device name (default: "radio0", typically wlan0)
-        
+
     Returns:
         List of networks with: ssid, bssid, frequency, signal_strength, encryption, mode
     """
@@ -361,57 +396,68 @@ async def router_wifi_scan(radio: str = "radio0") -> dict[str, Any]:
 
         result = []
         for network in networks.get("results", []):
-            result.append({
-                "ssid": network.get("ssid"),
-                "bssid": network.get("bssid"),
-                "frequency": network.get("frequency"),
-                "signal_strength_dbm": network.get("signal"),
-                "encryption": network.get("encryption"),
-                "mode": network.get("mode"),
-                "channel": network.get("channel"),
-            })
+            result.append(
+                {
+                    "ssid": network.get("ssid"),
+                    "bssid": network.get("bssid"),
+                    "frequency": network.get("frequency"),
+                    "signal_strength_dbm": network.get("signal"),
+                    "encryption": network.get("encryption"),
+                    "mode": network.get("mode"),
+                    "channel": network.get("channel"),
+                }
+            )
 
         return {"status": "ok", "radio": radio, "networks": result}
     except (PermissionError, RuntimeError) as exc:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="List connected WiFi clients on the router.", readOnlyHint=True)
+@mcp.tool(
+    description="List connected WiFi clients on the router.",
+    annotations={"readOnlyHint": True},
+)
 async def router_wifi_clients() -> dict[str, Any]:
     """List all connected WiFi clients.
-    
+
     Returns:
-        Dict with list of clients, each containing: mac_address, interface, hostname, 
+        Dict with list of clients, each containing: mac_address, interface, hostname,
                    signal_strength, rx_bytes, tx_bytes, connected_time_seconds
     """
     try:
         # Get clients from network device
-        clients_data = await conn_mgr.call("network.device", "status", {"name": "wlan0"})
+        clients_data = await conn_mgr.call(
+            "network.device", "status", {"name": "wlan0"}
+        )
 
         result = []
         for client in clients_data.get("clients", []):
-            result.append({
-                "mac_address": client.get("mac"),
-                "interface": "wlan0",
-                "hostname": client.get("hostname"),
-                "signal_strength_dbm": client.get("signal"),
-                "rx_bytes": client.get("rx_bytes"),
-                "tx_bytes": client.get("tx_bytes"),
-                "connected_time_seconds": client.get("connected_time"),
-            })
+            result.append(
+                {
+                    "mac_address": client.get("mac"),
+                    "interface": "wlan0",
+                    "hostname": client.get("hostname"),
+                    "signal_strength_dbm": client.get("signal"),
+                    "rx_bytes": client.get("rx_bytes"),
+                    "tx_bytes": client.get("tx_bytes"),
+                    "connected_time_seconds": client.get("connected_time"),
+                }
+            )
 
         return {"status": "ok", "total_clients": len(result), "clients": result}
     except (PermissionError, RuntimeError) as exc:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Get system logs (last N lines).", readOnlyHint=True)
+@mcp.tool(
+    description="Get system logs (last N lines).", annotations={"readOnlyHint": True}
+)
 async def router_system_logs(lines: int = 50) -> dict[str, Any]:
     """Retrieve recent system logs from the router.
-    
+
     Args:
         lines: Number of log lines to retrieve (default: 50)
-        
+
     Returns:
         Dict with log entries as list of strings
     """
@@ -427,42 +473,69 @@ async def router_system_logs(lines: int = 50) -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="Read UCI configuration value (network, wireless, firewall, etc.).", readOnlyHint=True)
-async def router_uci_get(config: str, section: str, option: str | None = None) -> dict[str, Any]:
+@mcp.tool(
+    description="Read UCI configuration value (network, wireless, firewall, etc.).",
+    annotations={"readOnlyHint": True},
+)
+async def router_uci_get(
+    config: str, section: str, option: str | None = None
+) -> dict[str, Any]:
     """Read a UCI configuration value.
-    
+
     Args:
         config: Configuration file (e.g., "network", "wireless", "firewall", "dhcp")
         section: Section name (e.g., "lan", "wlan0", "zone_wan")
         option: Optional specific option to retrieve; if omitted, returns entire section
-        
+
     Returns:
         Dict with the configuration value(s)
     """
     try:
         if option:
-            value = await conn_mgr.call("uci", "get", {"config": config, "section": section, "option": option})
-            return {"status": "ok", "config": config, "section": section, "option": option, "value": value.get("value")}
+            value = await conn_mgr.call(
+                "uci", "get", {"config": config, "section": section, "option": option}
+            )
+            return {
+                "status": "ok",
+                "config": config,
+                "section": section,
+                "option": option,
+                "value": value.get("value"),
+            }
         else:
-            section_data = await conn_mgr.call("uci", "get", {"config": config, "section": section})
-            return {"status": "ok", "config": config, "section": section, "data": section_data}
+            section_data = await conn_mgr.call(
+                "uci", "get", {"config": config, "section": section}
+            )
+            return {
+                "status": "ok",
+                "config": config,
+                "section": section,
+                "data": section_data,
+            }
     except (PermissionError, RuntimeError) as exc:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="List all sections in a UCI configuration file.", readOnlyHint=True)
+@mcp.tool(
+    description="List all sections in a UCI configuration file.",
+    annotations={"readOnlyHint": True},
+)
 async def router_uci_sections(config: str) -> dict[str, Any]:
     """List all sections in a UCI configuration file.
-    
+
     Args:
         config: Configuration file (e.g., "network", "wireless", "firewall")
-        
+
     Returns:
         Dict with list of section names
     """
     try:
         sections = await conn_mgr.call("uci", "sections", {"config": config})
-        return {"status": "ok", "config": config, "sections": sections.get("sections", [])}
+        return {
+            "status": "ok",
+            "config": config,
+            "sections": sections.get("sections", []),
+        }
     except (PermissionError, RuntimeError) as exc:
         return {"status": "error", "reason": str(exc)}
 
@@ -472,21 +545,26 @@ async def router_uci_sections(config: str) -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="Set a UCI configuration value with two-phase commit (set → validate → commit).", destructiveHint=True)
-async def router_uci_set(config: str, section: str, option: str, value: str) -> dict[str, Any]:
+@mcp.tool(
+    description="Set a UCI configuration value with two-phase commit (set → validate → commit).",
+    annotations={"destructiveHint": True},
+)
+async def router_uci_set(
+    config: str, section: str, option: str, value: str
+) -> dict[str, Any]:
     """Set a UCI configuration value with staged commit.
-    
+
     Two-phase process:
     1. Stage the change (set in pending)
     2. Validate syntax
     3. Commit to active config
-    
+
     Args:
         config: Configuration file (e.g., "network", "wireless", "firewall")
         section: Section name
         option: Option name
         value: New value (will be coerced to string)
-        
+
     Returns:
         Dict with status and result of staged commit
     """
@@ -495,7 +573,12 @@ async def router_uci_set(config: str, section: str, option: str, value: str) -> 
         set_result = await conn_mgr.call(
             "uci",
             "set",
-            {"config": config, "section": section, "option": option, "value": str(value)},
+            {
+                "config": config,
+                "section": section,
+                "option": option,
+                "value": str(value),
+            },
         )
 
         if not set_result.get("success"):
@@ -528,41 +611,57 @@ async def router_uci_set(config: str, section: str, option: str, value: str) -> 
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Revert uncommitted UCI changes for a configuration file.", destructiveHint=True)
+@mcp.tool(
+    description="Revert uncommitted UCI changes for a configuration file.",
+    annotations={"destructiveHint": True},
+)
 async def router_uci_revert(config: str) -> dict[str, Any]:
     """Revert uncommitted UCI changes.
-    
+
     Args:
         config: Configuration file to revert (e.g., "network", "wireless")
-        
+
     Returns:
         Dict with status of revert operation
     """
     try:
         result = await conn_mgr.call("uci", "revert", {"config": config})
-        return {"status": "ok", "config": config, "reverted": result.get("success", False)}
+        return {
+            "status": "ok",
+            "config": config,
+            "reverted": result.get("success", False),
+        }
     except (PermissionError, RuntimeError) as exc:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Restart a network interface (bring down and up).", destructiveHint=True)
+@mcp.tool(
+    description="Restart a network interface (bring down and up).",
+    annotations={"destructiveHint": True},
+)
 async def router_interface_restart(interface_name: str) -> dict[str, Any]:
     """Restart a network interface.
-    
+
     Args:
         interface_name: Interface name to restart (e.g., "lan", "wan", "wlan0")
-        
+
     Returns:
         Dict with status of restart operation
     """
     try:
-        result = await conn_mgr.call("network.interface", "restart", {"interface": interface_name})
-        return {"status": "ok", "interface": interface_name, "restarted": result.get("success", False)}
+        result = await conn_mgr.call(
+            "network.interface", "restart", {"interface": interface_name}
+        )
+        return {
+            "status": "ok",
+            "interface": interface_name,
+            "restarted": result.get("success", False),
+        }
     except (PermissionError, RuntimeError) as exc:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Add a firewall rule.", destructiveHint=True)
+@mcp.tool(description="Add a firewall rule.", annotations={"destructiveHint": True})
 async def router_firewall_rule_add(
     name: str,
     src_zone: str,
@@ -572,7 +671,7 @@ async def router_firewall_rule_add(
     dest_port: str | None = None,
 ) -> dict[str, Any]:
     """Add a firewall rule to the router.
-    
+
     Args:
         name: Rule name (unique identifier)
         src_zone: Source zone (e.g., "lan", "wan", "guest")
@@ -580,7 +679,7 @@ async def router_firewall_rule_add(
         target: Target action (ACCEPT, DROP, REJECT, default: ACCEPT)
         proto: Protocol filter (tcp, udp, icmp, all; optional)
         dest_port: Destination port(s) (e.g., "80", "80,443"; optional)
-        
+
     Returns:
         Dict with status and rule details
     """
@@ -609,27 +708,37 @@ async def router_firewall_rule_add(
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Delete a firewall rule by name.", destructiveHint=True)
+@mcp.tool(
+    description="Delete a firewall rule by name.", annotations={"destructiveHint": True}
+)
 async def router_firewall_rule_delete(rule_name: str) -> dict[str, Any]:
     """Delete a firewall rule.
-    
+
     Args:
         rule_name: Name of the rule to delete
-        
+
     Returns:
         Dict with status of deletion
     """
     try:
-        result = await conn_mgr.call("luci.network.firewall", "delete_rule", {"name": rule_name})
-        return {"status": "ok", "rule_name": rule_name, "deleted": result.get("success", False)}
+        result = await conn_mgr.call(
+            "luci.network.firewall", "delete_rule", {"name": rule_name}
+        )
+        return {
+            "status": "ok",
+            "rule_name": rule_name,
+            "deleted": result.get("success", False),
+        }
     except (PermissionError, RuntimeError) as exc:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="List all firewall rules and zones.", readOnlyHint=True)
+@mcp.tool(
+    description="List all firewall rules and zones.", annotations={"readOnlyHint": True}
+)
 async def router_firewall_rules() -> dict[str, Any]:
     """List all firewall rules and zones.
-    
+
     Returns:
         Dict with zones and rules
     """
@@ -649,13 +758,16 @@ async def router_firewall_rules() -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="Reload a system service (dnsmasq, firewall, etc.).", destructiveHint=True)
+@mcp.tool(
+    description="Reload a system service (dnsmasq, firewall, etc.).",
+    annotations={"destructiveHint": True},
+)
 async def router_service_reload(service: str) -> dict[str, Any]:
     """Reload (restart) a system service.
-    
+
     Args:
         service: Service name (e.g., "dnsmasq", "firewall", "network")
-        
+
     Returns:
         Dict with status of reload operation
     """
@@ -675,13 +787,16 @@ async def router_service_reload(service: str) -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="List installed packages on the router.", readOnlyHint=True)
+@mcp.tool(
+    description="List installed packages on the router.",
+    annotations={"readOnlyHint": True},
+)
 async def router_packages_list(filter_name: str | None = None) -> dict[str, Any]:
     """List installed packages.
-    
+
     Args:
         filter_name: Optional package name filter (substring search)
-        
+
     Returns:
         Dict with list of packages and versions
     """
@@ -690,7 +805,9 @@ async def router_packages_list(filter_name: str | None = None) -> dict[str, Any]
         packages = result.get("packages", [])
 
         if filter_name:
-            packages = [p for p in packages if filter_name.lower() in p.get("name", "").lower()]
+            packages = [
+                p for p in packages if filter_name.lower() in p.get("name", "").lower()
+            ]
 
         return {
             "status": "ok",
@@ -701,13 +818,16 @@ async def router_packages_list(filter_name: str | None = None) -> dict[str, Any]
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Search for a package in opkg repository.", readOnlyHint=True)
+@mcp.tool(
+    description="Search for a package in opkg repository.",
+    annotations={"readOnlyHint": True},
+)
 async def router_packages_search(query: str) -> dict[str, Any]:
     """Search for packages in the repository.
-    
+
     Args:
         query: Package name or description to search for
-        
+
     Returns:
         Dict with matching packages
     """
@@ -722,13 +842,16 @@ async def router_packages_search(query: str) -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Install a package via opkg (network must be accessible).", destructiveHint=True)
+@mcp.tool(
+    description="Install a package via opkg (network must be accessible).",
+    annotations={"destructiveHint": True},
+)
 async def router_package_install(package_name: str) -> dict[str, Any]:
     """Install a package.
-    
+
     Args:
         package_name: Package name to install
-        
+
     Returns:
         Dict with status of installation
     """

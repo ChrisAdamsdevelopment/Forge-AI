@@ -14,6 +14,7 @@ POST /modules/validate     → validate a manifest dict
 POST /modules/{id}/run     → execute a module
 GET  /config               → current effective config (no secrets)
 """
+
 from __future__ import annotations
 
 import json
@@ -39,6 +40,7 @@ _modules = ModuleService()
 
 # ── Health ─────────────────────────────────────────────────────────────────────
 
+
 @router.get("/health", tags=["system"])
 async def health():
     backend_health = await _inference.health()
@@ -51,6 +53,7 @@ async def health():
 
 
 # ── Chat (non-streaming) ───────────────────────────────────────────────────────
+
 
 class ChatMessage(BaseModel):
     role: str
@@ -88,10 +91,13 @@ async def chat(
 
     # Prepend system prompt if first message is not already a system message
     if not messages or messages[0].get("role") != "system":
-        messages.insert(0, {
-            "role": "system",
-            "content": settings.load_system_prompt(),
-        })
+        messages.insert(
+            0,
+            {
+                "role": "system",
+                "content": settings.load_system_prompt(),
+            },
+        )
 
     try:
         response = await _inference.chat(
@@ -114,6 +120,7 @@ async def chat(
 
 
 # ── Chat WebSocket (streaming) ─────────────────────────────────────────────────
+
 
 @router.websocket("/ws/chat/{session_id}")
 async def ws_chat(websocket: WebSocket, session_id: str):
@@ -187,7 +194,12 @@ async def ws_chat(websocket: WebSocket, session_id: str):
                             )
                             continue
                         elif stream_event.get("type") == "error":
-                            await websocket.send_json({"type": "error", "message": stream_event.get("message", "")})
+                            await websocket.send_json(
+                                {
+                                    "type": "error",
+                                    "message": stream_event.get("message", ""),
+                                }
+                            )
                             continue
                         else:
                             continue
@@ -200,14 +212,18 @@ async def ws_chat(websocket: WebSocket, session_id: str):
                     continue
 
                 history.append({"role": "assistant", "content": full_response})
-                await websocket.send_json({
-                    "type": "done",
-                    "session_id": session_id,
-                    "token_count": token_count,
-                })
+                await websocket.send_json(
+                    {
+                        "type": "done",
+                        "session_id": session_id,
+                        "token_count": token_count,
+                    }
+                )
 
             elif event_type == "cancel":
-                await websocket.send_json({"type": "error", "message": "Cancelled by client"})
+                await websocket.send_json(
+                    {"type": "error", "message": "Cancelled by client"}
+                )
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected: session=%s", session_id)
@@ -215,10 +231,12 @@ async def ws_chat(websocket: WebSocket, session_id: str):
 
 # ── Models ─────────────────────────────────────────────────────────────────────
 
+
 @router.get("/models", tags=["models"])
 async def list_models(_key: str = Depends(verify_api_key)):
     """List all models available in the local Ollama instance."""
     import httpx
+
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(f"{settings.ollama_base_url}/api/tags")
@@ -229,6 +247,7 @@ async def list_models(_key: str = Depends(verify_api_key)):
 
 
 # ── Modules ─────────────────────────────────────────────────────────────────────
+
 
 @router.get("/modules", tags=["modules"])
 async def list_modules(_key: str = Depends(verify_api_key)):
@@ -281,6 +300,7 @@ async def run_module(
 
 # ── Config (read-only, no secrets) ────────────────────────────────────────────
 
+
 @router.get("/config", tags=["system"])
 async def get_config(_key: str = Depends(verify_api_key)):
     return {
@@ -311,12 +331,16 @@ class RagDeleteRequest(BaseModel):
 
 
 @router.post("/rag/ingest/file", tags=["rag"])
-async def rag_ingest_file(request: RagIngestFileRequest, _key: str = Depends(verify_api_key)):
+async def rag_ingest_file(
+    request: RagIngestFileRequest, _key: str = Depends(verify_api_key)
+):
     return await rag_service.ingest_file(request.file_path)
 
 
 @router.post("/rag/ingest/directory", tags=["rag"])
-async def rag_ingest_directory(request: RagIngestDirectoryRequest, _key: str = Depends(verify_api_key)):
+async def rag_ingest_directory(
+    request: RagIngestDirectoryRequest, _key: str = Depends(verify_api_key)
+):
     return await rag_service.ingest_directory(request.dir_path, request.pattern)
 
 
@@ -326,5 +350,7 @@ async def rag_search(q: str, top_k: int = 5, _key: str = Depends(verify_api_key)
 
 
 @router.delete("/rag/document", tags=["rag"])
-async def rag_delete_document(request: RagDeleteRequest, _key: str = Depends(verify_api_key)):
+async def rag_delete_document(
+    request: RagDeleteRequest, _key: str = Depends(verify_api_key)
+):
     return await rag_service.delete_from_index(request.filename)

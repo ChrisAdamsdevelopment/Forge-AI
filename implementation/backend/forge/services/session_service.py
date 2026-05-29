@@ -5,6 +5,7 @@ CRUD for conversation sessions and their messages.
 Context window management: trims oldest messages when the token
 budget is exceeded, always preserving the system message.
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,7 +31,9 @@ class SessionService:
 
     # ── Sessions ──────────────────────────────────────────────────────────────
 
-    async def create_session(self, model_name: str, title: str = "New conversation") -> Session:
+    async def create_session(
+        self, model_name: str, title: str = "New conversation"
+    ) -> Session:
         session = Session(model_name=model_name, title=title)
         self._db.add(session)
         await self._db.flush()
@@ -51,9 +54,7 @@ class SessionService:
 
     async def archive_session(self, session_id: str) -> None:
         await self._db.execute(
-            update(Session)
-            .where(Session.id == session_id)
-            .values(is_archived=True)
+            update(Session).where(Session.id == session_id).values(is_archived=True)
         )
 
     # ── Messages ──────────────────────────────────────────────────────────────
@@ -125,13 +126,16 @@ class SessionService:
             cost = msg.token_count or _estimate_tokens(msg.content)
             if used + cost > budget and kept:
                 break
-            kept.insert(0, {
-                "role": msg.role,
-                "content": msg.content,
-                **({"tool_calls": msg.tool_calls} if msg.tool_calls else {}),
-                **({"tool_call_id": msg.tool_call_id} if msg.tool_call_id else {}),
-                **({"name": msg.tool_name} if msg.tool_name else {}),
-            })
+            kept.insert(
+                0,
+                {
+                    "role": msg.role,
+                    "content": msg.content,
+                    **({"tool_calls": msg.tool_calls} if msg.tool_calls else {}),
+                    **({"tool_call_id": msg.tool_call_id} if msg.tool_call_id else {}),
+                    **({"name": msg.tool_name} if msg.tool_name else {}),
+                },
+            )
             used += cost
 
         return [{"role": "system", "content": system_prompt}] + kept

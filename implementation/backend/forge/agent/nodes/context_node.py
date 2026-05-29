@@ -39,9 +39,16 @@ async def context_node(state: dict[str, Any]) -> dict[str, Any]:
         except Exception as exc:
             logger.warning("RAG search failed; continuing without RAG context: %s", exc)
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": _load_system_prompt()}]
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": _load_system_prompt()}
+    ]
     if rag_context:
-        messages.append({"role": "system", "content": f"Relevant document context:\n\n{rag_context}"})
+        messages.append(
+            {
+                "role": "system",
+                "content": f"Relevant document context:\n\n{rag_context}",
+            }
+        )
 
     messages.extend(history)
 
@@ -56,7 +63,9 @@ async def context_node(state: dict[str, Any]) -> dict[str, Any]:
             add_generation_prompt=True,
         )
     except Exception as exc:
-        logger.warning("Chat template formatting failed; continuing with raw messages: %s", exc)
+        logger.warning(
+            "Chat template formatting failed; continuing with raw messages: %s", exc
+        )
 
     return {
         "messages": messages,

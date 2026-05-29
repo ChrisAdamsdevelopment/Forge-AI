@@ -2,149 +2,86 @@
 
 ## Intended Use
 
-Forge AI is designed for **single-operator, local-first use** on systems you own or have
-explicit written authorization to access. This means:
+Forge-AI is intended for a single trusted operator working on systems they own
+or have explicit written authorization to administer or test. This includes a
+personal workstation, a home lab, an internal development environment, or a
+contracted penetration test with a defined scope.
 
-- Your own personal machine
-- Your own home lab or test environment
-- Systems where you are the authorized administrator
-- Penetration testing engagements with a signed scope-of-work agreement
+**This project provides powerful system automation capabilities. Use only on
+systems you own and control. Unauthorized use may violate computer misuse laws
+in your jurisdiction.**
 
-**Forge is not authorized for use against systems you do not own or lack explicit permission
-to test.** Unauthorized use may violate the Computer Fraud and Abuse Act (18 U.S.C. § 1030),
-the UK Computer Misuse Act, or equivalent laws in your jurisdiction.
+## Dual-Use Notice
 
----
+Forge-AI combines browser automation, terminal execution, filesystem access,
+persistent memory, local model orchestration, optional router administration,
+and authorized security assessment tooling. Those capabilities are useful for
+legitimate local automation and defensive testing, but they could be misused if
+run against third-party systems or configured with excessive privileges.
 
-## Dual-Use Disclosure
+The maintainer's position is that dual-use risk should be documented honestly,
+paired with safe defaults, and reviewed continuously. Contributions that add
+credential theft, stealth, persistence, unauthorized access, destructive
+payloads, or evasion are not accepted.
 
-Forge's capabilities were designed to be useful. They are also capable of causing harm if
-misused. The developer acknowledges this openly.
+## Supported Versions
 
-### What Forge Can Do (Legitimate Use)
-
-- Automate repetitive personal workflows on your own machine
-- Perform authorized security research against your own systems
-- Run autonomous penetration tests against lab environments you control
-- Manage and monitor your own OpenWrt router
-- Ingest and query your own documents via RAG
-
-### What the Same Architecture Could Enable (Misuse)
-
-The same modular, tool-integrated, persistent architecture that makes Forge useful as a
-personal agent also makes it architecturally similar to an advanced implant if weaponized.
-Specifically:
-
-- **Browser + screen + memory servers** — could be combined for credential capture
-  and session replay against the operator's own browser state
-- **Terminal server** — arbitrary command execution in any shell
-- **Filesystem server** — read/write/delete within ALLOWED_ROOTS
-- **Router server** — firewall rule modification, VPN rotation, DNS manipulation,
-  traffic interception via redsocks on an OpenWrt device
-- **Operator mode (pentest server)** — autonomous recon, enumeration, and
-  attack-graph planning using Beam Search and MCTS
-
-The developer's position: these dual-use risks are real. They are documented here because
-the security industry needs to understand what AI-native agent architectures enable — both
-the legitimate uses and the threat surface they represent.
-
-### What Is Intentionally Not Implemented
-
-The following capabilities are explicitly stubbed out and return `{"status": "blocked"}`
-rather than executing:
-
-- SQL injection exploitation (`exploit_sqli`)
-- Credential brute-force via Hydra (`exploit_hydra`)
-- Post-exploitation loot collection (`post_loot_collect`)
-- Pivot scanning from compromised sessions (`post_pivot_scan`)
-
-These stubs exist as architectural markers — documenting where an attacker converting this
-codebase would need to add code — without providing that code.
-
----
-
-## Threat Model
-
-### In Scope
-
-- Single trusted operator running Forge on their own machine
-- Accidental credential exposure (ngrok domain, router password, bearer token)
-- Prompt injection via untrusted content ingested into RAG
-- Module supply-chain risk (malicious module.json / module code)
-- Over-broad filesystem access via misconfigured ALLOWED_ROOTS
-- LAN exposure when ngrok or enable_lan is active
-
-### Out of Scope
-
-- Multi-tenant isolation (Forge has no concept of multiple untrusted users)
-- Hardened sandboxing against a compromised operator (Forge runs as the operator)
-
-### Router Deployment Note
-
-The router server gives Forge programmatic access to your network infrastructure.
-If deployed carelessly, it can:
-
-- Modify firewall rules
-- Rotate VPN exit nodes
-- Redirect DNS queries
-- Intercept unencrypted traffic via redsocks
-
-**Only deploy the router server against your own router. Never expose the router server
-endpoint to untrusted networks.**
-
----
-
-## Configuration Hardening Checklist
-
-Before running Forge in any context beyond local development:
-
-- [ ] `FORGE_ALLOWED_ROOTS` is set to the minimum directories the agent needs
-- [ ] `NGROK_DOMAIN` is set via environment variable, not hardcoded in source
-- [ ] `ROUTER_PASSWORD` is set via environment variable, never committed to git
-- [ ] Bearer token (`~/.forge/auth.key`) has not been shared or logged
-- [ ] `enable_lan` is `false` unless you explicitly need LAN access
-- [ ] Router server is not exposed to untrusted networks
-- [ ] You have reviewed which modules are enabled in `modules/*/module.json`
-
----
+Forge-AI is an early-stage project. Security fixes target the default branch
+unless a release branch is explicitly documented.
 
 ## Reporting a Vulnerability
 
-If you find a security vulnerability in this codebase — including prompt injection vectors,
-authentication bypasses, path traversal in filesystem tools, or router server exploits —
-please report it privately before disclosing publicly.
+Please report suspected vulnerabilities privately before public disclosure.
 
-**Contact:** chris@spectracleanse.com  
-**Subject line:** `[Forge-AI Security] <brief description>`
+- Email/contact: open a private security advisory on GitHub for
+  `ChrisAdamsdevelopment/Forge-AI`, or contact the maintainer through the
+  published GitHub profile if advisories are unavailable.
+- Include: affected commit or version, reproduction steps, impact, logs or
+  screenshots when safe to share, and whether the issue is actively exploited.
+- Do not include real third-party secrets, personal data, or exploit output from
+  systems you are not authorized to test.
 
-Please include:
-- A description of the vulnerability
-- Steps to reproduce
-- Your assessment of impact
-- Any suggested fix (optional but appreciated)
+The maintainer will attempt to acknowledge reports within 7 days, assess impact,
+and coordinate a fix and disclosure timeline appropriate to severity.
 
-I will acknowledge receipt within 48 hours and aim to resolve confirmed issues within
-14 days. I will credit researchers who report valid vulnerabilities unless they prefer
-to remain anonymous.
+## Scope
 
-**Please do not open a public GitHub issue for security vulnerabilities.**
+In scope:
 
----
+- Exposure of secrets or credentials through repository files, logs, or APIs
+- Unsafe default filesystem access or path traversal in Forge tools
+- Authentication, authorization, or network exposure issues in Forge services
+- Prompt-injection paths that can trigger unintended tool execution
+- Router, MCP, memory, RAG, and module-loading vulnerabilities in this codebase
+- Documentation errors that materially mislead users about safe deployment
 
-## Responsible Disclosure Philosophy
+Out of scope:
 
-This project exists in part to demonstrate that the architecture of a good AI agent and
-the architecture of a good AI implant are functionally identical — differing only in
-intent. That finding is worth making public so the security industry can prepare defenses
-before this class of threat appears in the wild.
+- Attacks against third-party services without written authorization
+- Social engineering, spam, denial-of-service, or physical attacks
+- Vulnerabilities caused solely by unsafe local `.env` values or deliberate
+  operator misuse outside documented safeguards
+- Reports requiring destructive payloads, credential theft, persistence, evasion,
+  or exfiltration to demonstrate impact
 
-The developer is committed to:
+## Safe Harbor
 
-1. Honest documentation of what the platform can do
-2. Not shipping exploitation capabilities, only documenting their architectural location
-3. Responding to security reports seriously and promptly
-4. Supporting researchers and journalists who cover this topic responsibly
+Good-faith security research is welcome when it:
 
----
+1. Targets only systems you own or are authorized to test.
+2. Uses the minimum access needed to validate the issue.
+3. Avoids persistence, lateral movement, data destruction, and secret collection.
+4. Stops immediately if personal data or third-party secrets are encountered.
+5. Reports findings privately and allows reasonable remediation time.
 
-*Last updated: May 2026*
+The maintainer will not pursue action against researchers who follow this policy
+and act in good faith.
+
+## Deployment Security Checklist
+
+- Copy `.env.example` to `.env` and keep `.env` out of git.
+- Set `FORGE_ALLOWED_ROOTS` to the narrowest directories the agent needs.
+- Leave `NGROK_DOMAIN` unset unless remote access is required.
+- Use strong local firewall rules for MCP and FastAPI ports.
+- Store router credentials only in environment variables or a local `.env`.
+- Review [THREAT_MODEL.md](THREAT_MODEL.md) before exposing Forge to any network.

@@ -4,6 +4,7 @@ forge/core/database.py
 Async SQLAlchemy engine + session factory for SQLite (WAL mode).
 All ORM models live in forge/core/models.py.
 """
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -64,5 +65,6 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 async def create_all_tables() -> None:
     """Create all tables defined in models.py. Called at app startup."""
     from forge.core import models as _  # noqa: F401 – ensures models are registered
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
