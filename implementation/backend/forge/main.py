@@ -3,6 +3,7 @@ forge/main.py
 
 FastAPI application factory + startup/shutdown lifecycle hooks.
 """
+
 from __future__ import annotations
 
 import logging
@@ -63,14 +64,20 @@ def create_app() -> FastAPI:
         logger.info("Database tables ready")
 
         loader = ModuleLoader()
-        loaded_for_registry = await loader.load_all(__import__("forge.agent.tools.registry", fromlist=["*"]))
-        logger.info("Loaded modules into internal registry: %s", loaded_for_registry or "none")
+        loaded_for_registry = await loader.load_all(
+            __import__("forge.agent.tools.registry", fromlist=["*"])
+        )
+        logger.info(
+            "Loaded modules into internal registry: %s", loaded_for_registry or "none"
+        )
 
         try:
             from forge.tool_server import mcp
 
             loaded_for_mcp = await loader.load_all(mcp)
-            logger.info("Loaded modules into FastMCP server: %s", loaded_for_mcp or "none")
+            logger.info(
+                "Loaded modules into FastMCP server: %s", loaded_for_mcp or "none"
+            )
         except Exception as exc:
             logger.debug("FastMCP module loading skipped: %s", exc)
 
@@ -90,6 +97,7 @@ app = create_app()
 
 def run():
     import uvicorn
+
     uvicorn.run(
         "forge.main:app",
         host=settings.host,

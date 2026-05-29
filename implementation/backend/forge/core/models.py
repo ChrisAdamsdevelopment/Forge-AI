@@ -3,6 +3,7 @@ forge/core/models.py
 
 SQLAlchemy ORM models for all persisted Forge state.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -34,19 +35,27 @@ def _uuid() -> str:
 
 # ── Sessions ─────────────────────────────────────────────────────────────────
 
+
 class Session(Base):
     __tablename__ = "sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    title: Mapped[str] = mapped_column(String(255), nullable=False, default="New conversation")
+    title: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="New conversation"
+    )
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_good: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
 
     messages: Mapped[list[Message]] = relationship(
-        "Message", back_populates="session", order_by="Message.created_at", cascade="all, delete-orphan"
+        "Message",
+        back_populates="session",
+        order_by="Message.created_at",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:
@@ -55,12 +64,16 @@ class Session(Base):
 
 # ── Messages ──────────────────────────────────────────────────────────────────
 
+
 class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     role: Mapped[str] = mapped_column(
         Enum("user", "assistant", "system", "tool", name="message_role"), nullable=False
@@ -82,6 +95,7 @@ class Message(Base):
 
 # ── RAG Documents ─────────────────────────────────────────────────────────────
 
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -101,12 +115,15 @@ class Document(Base):
 
 # ── Evaluation Runs ──────────────────────────────────────────────────────────
 
+
 class EvalRun(Base):
     __tablename__ = "eval_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     total_tasks: Mapped[int] = mapped_column(Integer, default=0)
     passed_tasks: Mapped[int] = mapped_column(Integer, default=0)
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -119,6 +136,7 @@ class EvalRun(Base):
 
 
 # ── LoRA Adapters ─────────────────────────────────────────────────────────────
+
 
 class Adapter(Base):
     __tablename__ = "adapters"

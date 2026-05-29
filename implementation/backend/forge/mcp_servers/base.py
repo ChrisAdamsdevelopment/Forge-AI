@@ -39,38 +39,44 @@ SERVER_DESCRIPTIONS = {
 
 def create_server(domain: str, description: str | None = None) -> FastMCP:
     """Create a FastMCP server instance for a specific domain.
-    
+
     Args:
         domain: Domain name (key in MCP_PORTS)
         description: Optional override for server description
-        
+
     Returns:
         FastMCP server instance
-        
+
     Raises:
         ValueError: If domain not in MCP_PORTS
     """
     if domain not in MCP_PORTS:
-        raise ValueError(f"Unknown domain: {domain}. Available: {list(MCP_PORTS.keys())}")
-    
-    desc = description or SERVER_DESCRIPTIONS.get(domain, f"Forge {domain.title()} MCP Server")
+        raise ValueError(
+            f"Unknown domain: {domain}. Available: {list(MCP_PORTS.keys())}"
+        )
+
+    desc = description or SERVER_DESCRIPTIONS.get(
+        domain, f"Forge {domain.title()} MCP Server"
+    )
     return FastMCP(desc)
 
 
 def get_port(domain: str) -> int:
     """Get the MCP server port for a domain.
-    
+
     Args:
         domain: Domain name
-        
+
     Returns:
         Port number
-        
+
     Raises:
         ValueError: If domain not in MCP_PORTS
     """
     if domain not in MCP_PORTS:
-        raise ValueError(f"Unknown domain: {domain}. Available: {list(MCP_PORTS.keys())}")
+        raise ValueError(
+            f"Unknown domain: {domain}. Available: {list(MCP_PORTS.keys())}"
+        )
     return MCP_PORTS[domain]
 
 
@@ -80,26 +86,26 @@ async def run_server(
     port: int | None = None,
 ) -> None:
     """Run a domain-specific MCP server.
-    
+
     Args:
         domain: Domain name (used to determine port if not provided)
         register_fn: Function to call with FastMCP instance to register tools
         port: Optional explicit port (overrides domain default)
-        
+
     Example:
         async def register_tools(mcp: FastMCP):
             @mcp.tool()
             async def my_tool():
                 return {"status": "ok"}
-        
+
         await run_server("browser", register_tools)
     """
     if port is None:
         port = get_port(domain)
-    
+
     mcp = create_server(domain)
     register_fn(mcp)
-    
+
     print(f"Starting {domain.title()} MCP Server on port {port}...")
     await mcp.run(port=port)
 

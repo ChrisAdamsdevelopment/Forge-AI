@@ -19,27 +19,33 @@ from forge.mcp_servers.base import get_port
 mcp = FastMCP("RAG Retrieval Agent")
 
 
-@mcp.tool(description="Ingest a local file into the Forge RAG index.", annotations={"destructiveHint": True})
+@mcp.tool(
+    description="Ingest a local file into the Forge RAG index.",
+    annotations={"destructiveHint": True},
+)
 async def ingest_rag_file(file_path: str) -> dict:
     """Ingest file to RAG index.
-    
+
     Args:
         file_path: Path to file to ingest
-        
+
     Returns:
         Dict with ingestion status and chunks count
     """
     return await rag_service.ingest_file(file_path)
 
 
-@mcp.tool(description="Search the Forge RAG index for relevant chunks.", annotations={"readOnlyHint": True})
+@mcp.tool(
+    description="Search the Forge RAG index for relevant chunks.",
+    annotations={"readOnlyHint": True},
+)
 async def search_rag_index(query: str, top_k: int = 5) -> dict:
     """Search RAG index.
-    
+
     Args:
         query: Search query
         top_k: Number of top results to return
-        
+
     Returns:
         Dict with relevant chunks and scores
     """

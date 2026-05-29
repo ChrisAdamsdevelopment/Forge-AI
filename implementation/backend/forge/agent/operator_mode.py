@@ -32,8 +32,12 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    file_handler = logging.FileHandler(LOG_DIR / f"operator_mode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    file_handler = logging.FileHandler(
+        LOG_DIR / f"operator_mode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     stream_handler = logging.StreamHandler()
@@ -118,7 +122,9 @@ class MCTSNode:
         if self.visits == 0:
             return float("inf")
         parent_visits = max(1, self.parent.visits if self.parent else 1)
-        return (self.value / self.visits) + exploration * math.sqrt(math.log(parent_visits) / self.visits)
+        return (self.value / self.visits) + exploration * math.sqrt(
+            math.log(parent_visits) / self.visits
+        )
 
 
 ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -129,7 +135,14 @@ LLMCallback = Callable[[str], Awaitable[str]]
 class OperatorMode:
     """Authorized attack-path planning and execution orchestrator."""
 
-    RECON_TOOLS = {"recon_nmap_scan", "recon_web_tech", "recon_dir_bruteforce", "recon_dns_enum", "recon_whois", "recon_subdomain_enum"}
+    RECON_TOOLS = {
+        "recon_nmap_scan",
+        "recon_web_tech",
+        "recon_dir_bruteforce",
+        "recon_dns_enum",
+        "recon_whois",
+        "recon_subdomain_enum",
+    }
     INTERACTIVE_TOOLS = {"exploit_hydra", "post_loot_collect", "post_pivot_scan"}
 
     def __init__(
@@ -149,7 +162,9 @@ class OperatorMode:
         self.mcts_simulations = max(1, mcts_simulations)
         self.tool_executor = tool_executor
         self.approval_callback = approval_callback
-        self.auto_approve = os.environ.get("FORGE_OPERATOR_AUTO_APPROVE", "").strip().lower() in {"1", "true", "yes", "on"}
+        self.auto_approve = os.environ.get(
+            "FORGE_OPERATOR_AUTO_APPROVE", ""
+        ).strip().lower() in {"1", "true", "yes", "on"}
 
         self.attack_graph: dict[str, AttackStep] = {}
         self.phase = PhaseType.RECONNAISSANCE
@@ -174,13 +189,19 @@ Return JSON array of objects with tool_name, parameters, rationale."""
             response = await self.llm_callback(prompt)
             parsed = json.loads(response)
             if isinstance(parsed, list):
-                return [item for item in parsed if isinstance(item, dict)][: self.beam_width * 2]
+                return [item for item in parsed if isinstance(item, dict)][
+                    : self.beam_width * 2
+                ]
         except Exception as exc:
             logger.error("LLM planning failed: %s", exc)
         return self._heuristic_planning(context)
 
     def _heuristic_planning(self, _context: str) -> list[dict[str, Any]]:
-        http_url = self.target if self.target.startswith(("http://", "https://")) else f"http://{self.target}"
+        http_url = (
+            self.target
+            if self.target.startswith(("http://", "https://"))
+            else f"http://{self.target}"
+        )
         plans = {
             PhaseType.RECONNAISSANCE: [
                 ("recon_nmap_scan", {"target": self.target, "scan_type": "quick"}),
@@ -200,12 +221,20 @@ Return JSON array of objects with tool_name, parameters, rationale."""
             PhaseType.EXPLOITATION: [],
         }
         return [
-            {"tool_name": name, "parameters": params, "rationale": f"Standard {self.phase.value} assessment step"}
+            {
+                "tool_name": name,
+                "parameters": params,
+                "rationale": f"Standard {self.phase.value} assessment step",
+            }
             for name, params in plans.get(self.phase, [])
         ]
 
     def _tool_type(self, tool_name: str) -> ToolType:
-        if tool_name in self.RECON_TOOLS or tool_name.startswith("recon_") or tool_name in {"exploit_search_sploit"}:
+        if (
+            tool_name in self.RECON_TOOLS
+            or tool_name.startswith("recon_")
+            or tool_name in {"exploit_search_sploit"}
+        ):
             return ToolType.RECON
         if tool_name in self.INTERACTIVE_TOOLS:
             return ToolType.INTERACTIVE
@@ -216,22 +245,51 @@ Return JSON array of objects with tool_name, parameters, rationale."""
         ports = result.get("open_ports")
         if isinstance(ports, list):
             findings["open_ports"] = ports
-            findings["ports"] = [item.get("port") for item in ports if isinstance(item, dict) and item.get("port")]
-            findings["services"] = [item.get("service") for item in ports if isinstance(item, dict) and item.get("service")]
-        for key in ("technologies", "directories_found", "subdomains", "exploits", "findings"):
+            findings["ports"] = [
+                item.get("port")
+                for item in ports
+                if isinstance(item, dict) and item.get("port")
+            ]
+            findings["services"] = [
+                item.get("service")
+                for item in ports
+                if isinstance(item, dict) and item.get("service")
+            ]
+        for key in (
+            "technologies",
+            "directories_found",
+            "subdomains",
+            "exploits",
+            "findings",
+        ):
             value = result.get(key)
             if value:
                 findings[key] = value
         if result.get("vulnerable") is True:
-            findings["vulnerabilities"] = [{k: result.get(k) for k in ("technique", "payload", "database") if result.get(k)}]
+            findings["vulnerabilities"] = [
+                {
+                    k: result.get(k)
+                    for k in ("technique", "payload", "database")
+                    if result.get(k)
+                }
+            ]
         return findings
 
     def _score_result(self, result: dict[str, Any]) -> float:
         findings = self._extract_findings(result)
         open_ports = findings.get("open_ports", [])
         services = findings.get("services", [])
-        vulns = findings.get("vulnerabilities", []) or findings.get("findings", []) or findings.get("exploits", [])
-        return float(len(open_ports) * 3 + len(set(services)) * 2 + len(vulns) * 10 + len(findings))
+        vulns = (
+            findings.get("vulnerabilities", [])
+            or findings.get("findings", [])
+            or findings.get("exploits", [])
+        )
+        return float(
+            len(open_ports) * 3
+            + len(set(services)) * 2
+            + len(vulns) * 10
+            + len(findings)
+        )
 
     def _score_candidate(self, step: AttackStep) -> float:
         historical_score = 0.0
@@ -240,8 +298,12 @@ Return JSON array of objects with tool_name, parameters, rationale."""
                 historical_score += self._score_result(result)
         phase_bias = {
             PhaseType.RECONNAISSANCE: 4.0 if step.tool_type == ToolType.RECON else 0.0,
-            PhaseType.ENUMERATION: 2.0 if step.tool_name in {"recon_nmap_scan", "recon_web_tech"} else 1.0,
-            PhaseType.VULNERABILITY_ANALYSIS: 4.0 if step.tool_name.startswith("exploit_") else 1.0,
+            PhaseType.ENUMERATION: 2.0
+            if step.tool_name in {"recon_nmap_scan", "recon_web_tech"}
+            else 1.0,
+            PhaseType.VULNERABILITY_ANALYSIS: 4.0
+            if step.tool_name.startswith("exploit_")
+            else 1.0,
             PhaseType.EXPLOITATION: 0.5,
             PhaseType.REPORTING: 0.0,
         }[step.phase]
@@ -251,7 +313,9 @@ Return JSON array of objects with tool_name, parameters, rationale."""
         """Keep top beam_width candidates by observed ports, services, and vulnerabilities."""
         for step in candidates:
             step.score = self._score_candidate(step)
-        selected = sorted(candidates, key=lambda item: item.score, reverse=True)[: self.beam_width]
+        selected = sorted(candidates, key=lambda item: item.score, reverse=True)[
+            : self.beam_width
+        ]
         self.decisions.append(
             {
                 "algorithm": "beam_search",
@@ -277,7 +341,11 @@ Return JSON array of objects with tool_name, parameters, rationale."""
         }
         known_services = json.dumps(self.findings_summary).lower()
         reward = tool_rewards.get(step.tool_name, 0.25)
-        if step.tool_name in {"recon_web_tech", "recon_dir_bruteforce", "exploit_sqlmap_test"} and any(s in known_services for s in ["http", "https", "apache", "nginx"]):
+        if step.tool_name in {
+            "recon_web_tech",
+            "recon_dir_bruteforce",
+            "exploit_sqlmap_test",
+        } and any(s in known_services for s in ["http", "https", "apache", "nginx"]):
             reward += 0.20
         if step.tool_type != ToolType.RECON:
             reward -= 0.10
@@ -320,7 +388,9 @@ Return JSON array of objects with tool_name, parameters, rationale."""
                 continue
             reward = self._simulate_tool_outcome(expanded.step)
             self._mcts_backpropagate(expanded, reward)
-        ranked = sorted(candidates, key=lambda step: step.score, reverse=True)[: self.beam_width]
+        ranked = sorted(candidates, key=lambda step: step.score, reverse=True)[
+            : self.beam_width
+        ]
         self.decisions.append(
             {
                 "algorithm": "mcts",
@@ -341,7 +411,11 @@ Return JSON array of objects with tool_name, parameters, rationale."""
             tool_name = str(step_dict.get("tool_name", "")).strip()
             if not tool_name:
                 continue
-            parameters = step_dict.get("parameters", {}) if isinstance(step_dict.get("parameters", {}), dict) else {}
+            parameters = (
+                step_dict.get("parameters", {})
+                if isinstance(step_dict.get("parameters", {}), dict)
+                else {}
+            )
             key = (tool_name, json.dumps(parameters, sort_keys=True, default=str))
             if key in seen:
                 continue
@@ -367,12 +441,20 @@ Return JSON array of objects with tool_name, parameters, rationale."""
         if step.tool_type == ToolType.RECON:
             return True
         if self.auto_approve:
-            logger.warning("FORGE_OPERATOR_AUTO_APPROVE=true: approving %s (%s)", step.step_id, step.tool_name)
+            logger.warning(
+                "FORGE_OPERATOR_AUTO_APPROVE=true: approving %s (%s)",
+                step.step_id,
+                step.tool_name,
+            )
             return True
         if self.approval_callback:
             result = self.approval_callback(step)
             return bool(await result) if asyncio.iscoroutine(result) else bool(result)
-        logger.warning("Human approval required for %s (%s). Defaulting to denied in non-interactive mode.", step.step_id, step.tool_name)
+        logger.warning(
+            "Human approval required for %s (%s). Defaulting to denied in non-interactive mode.",
+            step.step_id,
+            step.tool_name,
+        )
         return False
 
     async def _execute_step(self, step: AttackStep) -> None:
@@ -388,7 +470,11 @@ Return JSON array of objects with tool_name, parameters, rationale."""
         step.result = result
         step.findings = self._extract_findings(result)
         step.score = self._score_result(result)
-        step.error = result.get("error") or result.get("stderr") if result.get("status") == "error" else None
+        step.error = (
+            result.get("error") or result.get("stderr")
+            if result.get("status") == "error"
+            else None
+        )
         self.findings_summary[step.step_id] = {
             "tool_name": step.tool_name,
             "parameters": step.parameters,
@@ -399,7 +485,12 @@ Return JSON array of objects with tool_name, parameters, rationale."""
 
     async def run(self) -> dict[str, Any]:
         logger.info("Starting Operator Mode for target: %s", self.target)
-        phases = [PhaseType.RECONNAISSANCE, PhaseType.ENUMERATION, PhaseType.VULNERABILITY_ANALYSIS, PhaseType.EXPLOITATION]
+        phases = [
+            PhaseType.RECONNAISSANCE,
+            PhaseType.ENUMERATION,
+            PhaseType.VULNERABILITY_ANALYSIS,
+            PhaseType.EXPLOITATION,
+        ]
         for phase in phases:
             if self.step_counter >= self.max_steps:
                 break
@@ -412,7 +503,13 @@ Return JSON array of objects with tool_name, parameters, rationale."""
                     break
                 step.human_approved = await self._request_human_approval(step)
                 if not step.human_approved:
-                    self.decisions.append({"algorithm": "approval", "step_id": step.step_id, "approved": False})
+                    self.decisions.append(
+                        {
+                            "algorithm": "approval",
+                            "step_id": step.step_id,
+                            "approved": False,
+                        }
+                    )
                     continue
                 logger.info("Executing %s: %s", step.step_id, step.tool_name)
                 await self._execute_step(step)
@@ -424,20 +521,32 @@ Return JSON array of objects with tool_name, parameters, rationale."""
             "target": self.target,
             "timestamp": datetime.now().isoformat(),
             "total_steps": len(self.attack_graph),
-            "executed_steps": sum(1 for step in self.attack_graph.values() if step.executed),
+            "executed_steps": sum(
+                1 for step in self.attack_graph.values() if step.executed
+            ),
             "findings_count": len(self.findings_summary),
-            "attack_graph": {sid: step.to_dict() for sid, step in self.attack_graph.items()},
+            "attack_graph": {
+                sid: step.to_dict() for sid, step in self.attack_graph.items()
+            },
             "decisions": self.decisions,
             "summary_findings": self.findings_summary,
             "markdown_report": self._generate_markdown_report(),
         }
-        report_file = LOG_DIR / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        report_file.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        report_file = (
+            LOG_DIR / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        )
+        report_file.write_text(
+            json.dumps(report, indent=2, default=str), encoding="utf-8"
+        )
         logger.info("Report saved to %s", report_file)
         return report
 
     def export_attack_graph_json(self) -> str:
-        return json.dumps({sid: step.to_dict() for sid, step in self.attack_graph.items()}, indent=2, default=str)
+        return json.dumps(
+            {sid: step.to_dict() for sid, step in self.attack_graph.items()},
+            indent=2,
+            default=str,
+        )
 
     def _generate_markdown_report(self) -> str:
         md = f"""# Operator Mode Attack Report
@@ -501,10 +610,15 @@ async def operator_mode_start(target: str, max_steps: int = 20) -> dict[str, Any
 async def operator_mode_get_attack_graph(target: str) -> dict[str, Any]:
     """Retrieve the most recent in-memory attack graph for a target."""
     report = _OPERATOR_REPORTS.get(target)
-    return {"status": "ok", "target": target, "graph": report.get("attack_graph", {}) if report else {}}
+    return {
+        "status": "ok",
+        "target": target,
+        "graph": report.get("attack_graph", {}) if report else {},
+    }
 
 
 if __name__ == "__main__":
+
     async def example() -> None:
         operator = OperatorMode("192.168.1.100")
         report = await operator.run()

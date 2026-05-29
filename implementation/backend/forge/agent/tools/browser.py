@@ -12,6 +12,7 @@ _page: Any = None
 async def _get_page() -> Any:
     global _playwright, _browser, _context, _page
     from playwright.async_api import async_playwright
+
     if _page and not _page.is_closed():
         return _page
 

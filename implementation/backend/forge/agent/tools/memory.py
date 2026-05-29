@@ -31,13 +31,20 @@ async def _ensure_db() -> None:
             )
             """
         )
-        columns = [row[1] for row in await (await db.execute("PRAGMA table_info(memory)")).fetchall()]
+        columns = [
+            row[1]
+            for row in await (await db.execute("PRAGMA table_info(memory)")).fetchall()
+        ]
         if "tags" not in columns:
-            await db.execute("ALTER TABLE memory ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
+            await db.execute(
+                "ALTER TABLE memory ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'"
+            )
         await db.commit()
 
 
-async def memory_store(key: str, value: str, tags: list[str] | None = None) -> dict[str, str | bool]:
+async def memory_store(
+    key: str, value: str, tags: list[str] | None = None
+) -> dict[str, str | bool]:
     """Persist a key-value memory item in SQLite."""
     if not key.strip():
         return {"key": key, "stored": False, "error": "Memory key must not be empty"}
@@ -65,11 +72,18 @@ async def memory_store(key: str, value: str, tags: list[str] | None = None) -> d
 async def memory_retrieve(key: str) -> dict[str, Any]:
     """Retrieve a key from persistent SQLite memory."""
     if not key.strip():
-        return {"key": key, "value": None, "found": False, "error": "Memory key must not be empty"}
+        return {
+            "key": key,
+            "value": None,
+            "found": False,
+            "error": "Memory key must not be empty",
+        }
     await _ensure_db()
     try:
         async with aiosqlite.connect(DB_PATH) as db:
-            cursor = await db.execute("SELECT value, tags, updated_at FROM memory WHERE key = ?", (key,))
+            cursor = await db.execute(
+                "SELECT value, tags, updated_at FROM memory WHERE key = ?", (key,)
+            )
             row = await cursor.fetchone()
     except aiosqlite.Error as exc:
         return {"key": key, "value": None, "found": False, "error": str(exc)}
@@ -80,4 +94,11 @@ async def memory_retrieve(key: str) -> dict[str, Any]:
         tags = json.loads(row[1] or "[]")
     except json.JSONDecodeError:
         tags = []
-    return {"key": key, "value": row[0], "tags": tags, "updated_at": row[2], "found": True, "db_path": str(DB_PATH)}
+    return {
+        "key": key,
+        "value": row[0],
+        "tags": tags,
+        "updated_at": row[2],
+        "found": True,
+        "db_path": str(DB_PATH),
+    }

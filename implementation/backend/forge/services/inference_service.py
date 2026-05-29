@@ -4,6 +4,7 @@ forge/services/inference_service.py
 Strategy-pattern inference abstraction.
 Supports Ollama (local) and any OpenAI-compatible remote endpoint (vLLM, LM Studio, etc.).
 """
+
 from __future__ import annotations
 
 import json
@@ -91,7 +92,10 @@ class OllamaBackend(BaseInferenceBackend):
                 "prompt": prompt,
                 "stream": False,
                 "raw": True,
-                "options": {"temperature": self._default_temp(temperature), "num_ctx": settings.num_ctx},
+                "options": {
+                    "temperature": self._default_temp(temperature),
+                    "num_ctx": settings.num_ctx,
+                },
             }
             async with httpx.AsyncClient(timeout=settings.inference_timeout) as client:
                 resp = await client.post(f"{self._base}/api/generate", json=payload)
@@ -103,7 +107,10 @@ class OllamaBackend(BaseInferenceBackend):
             "model": self._default_model(model),
             "messages": messages,
             "stream": False,
-            "options": {"temperature": self._default_temp(temperature), "num_ctx": settings.num_ctx},
+            "options": {
+                "temperature": self._default_temp(temperature),
+                "num_ctx": settings.num_ctx,
+            },
         }
         if tools:
             payload["tools"] = tools
@@ -114,7 +121,11 @@ class OllamaBackend(BaseInferenceBackend):
             data = resp.json()
 
         msg = data.get("message", {})
-        logger.debug("Ollama response: role=%s tool_calls=%s", msg.get("role"), bool(msg.get("tool_calls")))
+        logger.debug(
+            "Ollama response: role=%s tool_calls=%s",
+            msg.get("role"),
+            bool(msg.get("tool_calls")),
+        )
         return msg
 
     async def stream(
@@ -133,11 +144,16 @@ class OllamaBackend(BaseInferenceBackend):
                 "prompt": prompt,
                 "stream": True,
                 "raw": True,
-                "options": {"temperature": self._default_temp(temperature), "num_ctx": settings.num_ctx},
+                "options": {
+                    "temperature": self._default_temp(temperature),
+                    "num_ctx": settings.num_ctx,
+                },
             }
             parser = StreamingResponseParser()
             async with httpx.AsyncClient(timeout=settings.inference_timeout) as client:
-                async with client.stream("POST", f"{self._base}/api/generate", json=payload) as resp:
+                async with client.stream(
+                    "POST", f"{self._base}/api/generate", json=payload
+                ) as resp:
                     resp.raise_for_status()
                     async for line in resp.aiter_lines():
                         if not line:
@@ -146,7 +162,9 @@ class OllamaBackend(BaseInferenceBackend):
                             chunk = json.loads(line)
                         except json.JSONDecodeError:
                             continue
-                        for event in parser.feed(normalize_ollama_generate_chunk(chunk)):
+                        for event in parser.feed(
+                            normalize_ollama_generate_chunk(chunk)
+                        ):
                             yield event
                         if chunk.get("done"):
                             break
@@ -158,13 +176,18 @@ class OllamaBackend(BaseInferenceBackend):
             "model": self._default_model(model),
             "messages": messages,
             "stream": True,
-            "options": {"temperature": self._default_temp(temperature), "num_ctx": settings.num_ctx},
+            "options": {
+                "temperature": self._default_temp(temperature),
+                "num_ctx": settings.num_ctx,
+            },
         }
         if tools:
             payload["tools"] = tools
         parser = StreamingResponseParser()
         async with httpx.AsyncClient(timeout=settings.inference_timeout) as client:
-            async with client.stream("POST", f"{self._base}/api/chat", json=payload) as resp:
+            async with client.stream(
+                "POST", f"{self._base}/api/chat", json=payload
+            ) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line:
@@ -208,17 +231,31 @@ class OllamaBackend(BaseInferenceBackend):
         max_tokens: int = 4096,
     ) -> ChatMessage:
         """Generate from a pre-formatted raw prompt via Ollama /api/generate."""
-        return await self.chat([], model=model, temperature=temperature, max_tokens=max_tokens, prompt=prompt)
+        return await self.chat(
+            [],
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            prompt=prompt,
+        )
 
 
 class RemoteOpenAIBackend(BaseInferenceBackend):
-    def __init__(self, base_url: str | None = None, api_key: str | None = None, model: str | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
+    ) -> None:
         self._base = (base_url or settings.remote_inference_url or "").rstrip("/")
         self._key = api_key or settings.remote_inference_key or "local"
         self._model = model or settings.remote_model or "default"
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._key}", "Content-Type": "application/json"}
+        return {
+            "Authorization": f"Bearer {self._key}",
+            "Content-Type": "application/json",
+        }
 
     async def chat(
         self,
@@ -232,8 +269,12 @@ class RemoteOpenAIBackend(BaseInferenceBackend):
     ) -> ChatMessage:
         payload: dict[str, Any] = {
             "model": model or self._model,
-            "messages": [{"role": "user", "content": prompt}] if prompt is not None else messages,
-            "temperature": temperature if temperature is not None else settings.temperature,
+            "messages": [{"role": "user", "content": prompt}]
+            if prompt is not None
+            else messages,
+            "temperature": temperature
+            if temperature is not None
+            else settings.temperature,
             "max_tokens": max_tokens,
             "stream": False,
         }
@@ -242,7 +283,11 @@ class RemoteOpenAIBackend(BaseInferenceBackend):
             payload["tool_choice"] = "auto"
 
         async with httpx.AsyncClient(timeout=settings.inference_timeout) as client:
-            resp = await client.post(f"{self._base}/v1/chat/completions", json=payload, headers=self._headers())
+            resp = await client.post(
+                f"{self._base}/v1/chat/completions",
+                json=payload,
+                headers=self._headers(),
+            )
             resp.raise_for_status()
             data = resp.json()
 
@@ -260,8 +305,12 @@ class RemoteOpenAIBackend(BaseInferenceBackend):
     ) -> AsyncIterator[dict]:
         payload: dict[str, Any] = {
             "model": model or self._model,
-            "messages": [{"role": "user", "content": prompt}] if prompt is not None else messages,
-            "temperature": temperature if temperature is not None else settings.temperature,
+            "messages": [{"role": "user", "content": prompt}]
+            if prompt is not None
+            else messages,
+            "temperature": temperature
+            if temperature is not None
+            else settings.temperature,
             "max_tokens": max_tokens,
             "stream": True,
         }
@@ -271,7 +320,12 @@ class RemoteOpenAIBackend(BaseInferenceBackend):
 
         parser = StreamingResponseParser()
         async with httpx.AsyncClient(timeout=settings.inference_timeout) as client:
-            async with client.stream("POST", f"{self._base}/v1/chat/completions", json=payload, headers=self._headers()) as resp:
+            async with client.stream(
+                "POST",
+                f"{self._base}/v1/chat/completions",
+                json=payload,
+                headers=self._headers(),
+            ) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
@@ -291,14 +345,18 @@ class RemoteOpenAIBackend(BaseInferenceBackend):
     async def embed(self, text: str) -> list[float]:
         payload = {"model": self._model, "input": text}
         async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(f"{self._base}/v1/embeddings", json=payload, headers=self._headers())
+            resp = await client.post(
+                f"{self._base}/v1/embeddings", json=payload, headers=self._headers()
+            )
             resp.raise_for_status()
             return resp.json()["data"][0]["embedding"]
 
     async def health(self) -> bool:
         try:
             async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(f"{self._base}/v1/models", headers=self._headers())
+                resp = await client.get(
+                    f"{self._base}/v1/models", headers=self._headers()
+                )
                 return resp.status_code == 200
         except Exception:
             return False
@@ -312,13 +370,21 @@ class RemoteOpenAIBackend(BaseInferenceBackend):
         max_tokens: int = 4096,
     ) -> ChatMessage:
         """Generate from a raw prompt by sending it as a single user message."""
-        return await self.chat([], model=model, temperature=temperature, max_tokens=max_tokens, prompt=prompt)
+        return await self.chat(
+            [],
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            prompt=prompt,
+        )
 
 
 class InferenceService:
     def __init__(self) -> None:
         self._local = OllamaBackend()
-        self._remote: RemoteOpenAIBackend | None = RemoteOpenAIBackend() if settings.remote_inference_url else None
+        self._remote: RemoteOpenAIBackend | None = (
+            RemoteOpenAIBackend() if settings.remote_inference_url else None
+        )
 
     def _backend(self, prefer_remote: bool = False) -> BaseInferenceBackend:
         if prefer_remote and self._remote:
@@ -335,7 +401,9 @@ class InferenceService:
         prefer_remote: bool = False,
         prompt: str | None = None,
     ) -> ChatMessage:
-        return await self._backend(prefer_remote).chat(messages, tools, model=model, temperature=temperature, prompt=prompt)
+        return await self._backend(prefer_remote).chat(
+            messages, tools, model=model, temperature=temperature, prompt=prompt
+        )
 
     async def stream(
         self,
@@ -347,7 +415,9 @@ class InferenceService:
         prefer_remote: bool = False,
         prompt: str | None = None,
     ) -> AsyncIterator[dict]:
-        return self._backend(prefer_remote).stream(messages, tools=tools, model=model, temperature=temperature, prompt=prompt)
+        return self._backend(prefer_remote).stream(
+            messages, tools=tools, model=model, temperature=temperature, prompt=prompt
+        )
 
     async def generate(
         self,
@@ -357,7 +427,9 @@ class InferenceService:
         temperature: float | None = None,
         prefer_remote: bool = False,
     ) -> ChatMessage:
-        return await self._backend(prefer_remote).generate(prompt, model=model, temperature=temperature)
+        return await self._backend(prefer_remote).generate(
+            prompt, model=model, temperature=temperature
+        )
 
     async def embed(self, text: str) -> list[float]:
         return await self._local.embed(text)
@@ -383,7 +455,9 @@ def normalize_ollama_chunk(chunk: dict[str, Any]) -> dict[str, Any]:
                 "index": tool_call.get("index", index),
                 "id": tool_call.get("id") or f"ollama_tool_call_{index}",
                 "function": {
-                    "name": function.get("name") or tool_call.get("name") or tool_call.get("function_name"),
+                    "name": function.get("name")
+                    or tool_call.get("name")
+                    or tool_call.get("function_name"),
                     "arguments": arguments,
                 },
             }
@@ -417,7 +491,9 @@ def normalize_openai_chunk(chunk: dict[str, Any]) -> dict[str, Any]:
                 "index": tool_call.get("index", index),
                 "id": tool_call.get("id"),
                 "function": {
-                    "name": function.get("name") or tool_call.get("name") or tool_call.get("function_name"),
+                    "name": function.get("name")
+                    or tool_call.get("name")
+                    or tool_call.get("function_name"),
                     "arguments": arguments,
                 },
             }

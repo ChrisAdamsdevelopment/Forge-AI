@@ -19,19 +19,28 @@ from forge.mcp_servers.base import get_port
 mcp = FastMCP("Application Management Agent")
 
 
-@mcp.tool(description="Open an application by name or path.", annotations={"destructiveHint": True})
+@mcp.tool(
+    description="Open an application by name or path.",
+    annotations={"destructiveHint": True},
+)
 async def open_app(app_name_or_path: str) -> dict:
     """Open application."""
     return await app_open(app_name_or_path)
 
 
-@mcp.tool(description="Bring a window to focus by app name.", annotations={"destructiveHint": True})
+@mcp.tool(
+    description="Bring a window to focus by app name.",
+    annotations={"destructiveHint": True},
+)
 async def focus_app(app_name: str) -> dict:
     """Focus application window."""
     return await app_focus(app_name)
 
 
-@mcp.tool(description="List all open windows and applications.", annotations={"readOnlyHint": True})
+@mcp.tool(
+    description="List all open windows and applications.",
+    annotations={"readOnlyHint": True},
+)
 async def list_open_windows() -> dict:
     """List open windows."""
     return await app_list_windows()

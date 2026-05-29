@@ -26,6 +26,7 @@ Usage::
         inference=InferenceService(),
     )
 """
+
 from __future__ import annotations
 
 import json
@@ -58,10 +59,7 @@ def classify_risk(manifest: dict) -> str:
 
     if any(kw in tool_str for kw in _CRITICAL_KEYWORDS) or perms.get("reads_secrets"):
         return "critical"
-    if (
-        perms.get("terminal") is True
-        or any(kw in tool_str for kw in _HIGH_KEYWORDS)
-    ):
+    if perms.get("terminal") is True or any(kw in tool_str for kw in _HIGH_KEYWORDS):
         return "high"
     if perms.get("network") or any(kw in tool_str for kw in _MEDIUM_KEYWORDS):
         return "medium"
@@ -71,14 +69,28 @@ def classify_risk(manifest: dict) -> str:
 # ── Manifest validation ───────────────────────────────────────────────────────
 
 REQUIRED_FIELDS = (
-    "id", "name", "version", "author", "description",
-    "category", "entrypoint", "input_schema", "output_schema",
-    "permissions", "safety",
+    "id",
+    "name",
+    "version",
+    "author",
+    "description",
+    "category",
+    "entrypoint",
+    "input_schema",
+    "output_schema",
+    "permissions",
+    "safety",
 )
 
 ALLOWED_CATEGORIES = {
-    "research", "coding", "file_ops", "media", "security",
-    "writing", "monitoring", "utility",
+    "research",
+    "coding",
+    "file_ops",
+    "media",
+    "security",
+    "writing",
+    "monitoring",
+    "utility",
 }
 
 
@@ -119,6 +131,7 @@ def validate_manifest(manifest: dict) -> dict:
 
 # ── Run result ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class ModuleRunResult:
     module_id: str
@@ -137,6 +150,7 @@ class ModuleRunResult:
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 
+
 class ModuleRunner:
     """
     Loads modules, renders their prompts via Jinja2, and executes them
@@ -149,7 +163,11 @@ class ModuleRunner:
     # ── Loading ───────────────────────────────────────────────────────────────
 
     def load_manifest(self, module_path: str | Path) -> dict:
-        path = self.root / module_path if not Path(module_path).is_absolute() else Path(module_path)
+        path = (
+            self.root / module_path
+            if not Path(module_path).is_absolute()
+            else Path(module_path)
+        )
         manifest_file = path / "module.yaml"
         if not manifest_file.exists():
             raise FileNotFoundError(f"No module.yaml in {path}")
@@ -162,7 +180,13 @@ class ModuleRunner:
             try:
                 raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
                 validation = validate_manifest(raw)
-                results.append({**raw, "_validation": validation, "_path": str(manifest_path.parent)})
+                results.append(
+                    {
+                        **raw,
+                        "_validation": validation,
+                        "_path": str(manifest_path.parent),
+                    }
+                )
             except Exception as exc:
                 results.append({"_path": str(manifest_path), "_error": str(exc)})
         return results
@@ -174,12 +198,21 @@ class ModuleRunner:
         Validate input_data against the module's input JSON Schema.
         Returns {"valid": bool, "missing": [...], "errors": [...]}.
         """
-        path = self.root / module_path if not Path(module_path).is_absolute() else Path(module_path)
+        path = (
+            self.root / module_path
+            if not Path(module_path).is_absolute()
+            else Path(module_path)
+        )
         manifest = self.load_manifest(path)
         schema_file = path / manifest["input_schema"]
 
         if not schema_file.exists():
-            return {"valid": True, "missing": [], "errors": [], "warning": "No input schema found"}
+            return {
+                "valid": True,
+                "missing": [],
+                "errors": [],
+                "warning": "No input schema found",
+            }
 
         schema = json.loads(schema_file.read_text(encoding="utf-8"))
         required = schema.get("required", [])
@@ -196,7 +229,11 @@ class ModuleRunner:
                 elif expected_type == "integer" and not isinstance(value, int):
                     errors.append(f"'{key}' must be an integer")
 
-        return {"valid": not missing and not errors, "missing": missing, "errors": errors}
+        return {
+            "valid": not missing and not errors,
+            "missing": missing,
+            "errors": errors,
+        }
 
     # ── Prompt rendering ──────────────────────────────────────────────────────
 
@@ -205,7 +242,11 @@ class ModuleRunner:
         Render the module's entrypoint prompt template with Jinja2,
         substituting input_data variables.
         """
-        path = self.root / module_path if not Path(module_path).is_absolute() else Path(module_path)
+        path = (
+            self.root / module_path
+            if not Path(module_path).is_absolute()
+            else Path(module_path)
+        )
         manifest = self.load_manifest(path)
         entrypoint = manifest["entrypoint"]
 
@@ -227,7 +268,7 @@ class ModuleRunner:
         self,
         module_path: str | Path,
         input_data: dict,
-        inference: Any,          # InferenceService — typed loosely to avoid circular imports
+        inference: Any,  # InferenceService — typed loosely to avoid circular imports
         system_prompt: str = "",
         output_root: str | Path = "",
     ) -> ModuleRunResult:
@@ -244,7 +285,11 @@ class ModuleRunner:
         Does NOT automatically execute high-risk tools — the caller is
         responsible for enforcing the tool policy.
         """
-        path = self.root / module_path if not Path(module_path).is_absolute() else Path(module_path)
+        path = (
+            self.root / module_path
+            if not Path(module_path).is_absolute()
+            else Path(module_path)
+        )
 
         # 1. Manifest
         manifest = self.load_manifest(path)

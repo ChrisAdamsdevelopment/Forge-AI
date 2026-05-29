@@ -69,7 +69,9 @@ class StreamingResponseParser:
                     self._feed_argument_char(state, char)
                     if self._tool_call_complete(state):
                         self._emit_tool_call(index, state)
-                        state = self._tool_states.setdefault(index, self._new_tool_state())
+                        state = self._tool_states.setdefault(
+                            index, self._new_tool_state()
+                        )
                         break
 
             self._sync_public_state(state)
@@ -86,7 +88,9 @@ class StreamingResponseParser:
             try:
                 json.loads(buffer)
             except json.JSONDecodeError:
-                self._events.append({"type": "error", "message": "Incomplete tool call arguments JSON"})
+                self._events.append(
+                    {"type": "error", "message": "Incomplete tool call arguments JSON"}
+                )
                 continue
             self._emit_tool_call(index, state)
         self._state = self.DONE
@@ -126,7 +130,11 @@ class StreamingResponseParser:
             state["seen_close_brace"] = True
 
     def _tool_call_complete(self, state: dict[str, Any]) -> bool:
-        if not (state["seen_open_brace"] and state["seen_close_brace"] and state["bracket_depth"] == 0):
+        if not (
+            state["seen_open_brace"]
+            and state["seen_close_brace"]
+            and state["bracket_depth"] == 0
+        ):
             return False
         try:
             json.loads(state["arguments_buffer"])
@@ -174,17 +182,58 @@ def _run_inline_tests() -> None:
                 {
                     "index": 0,
                     "id": "call_ollama",
-                    "function": {"name": "file_read", "arguments": '{"path": "/tmp/a.txt"}'},
+                    "function": {
+                        "name": "file_read",
+                        "arguments": '{"path": "/tmp/a.txt"}',
+                    },
                 }
             ]
         }
     )
-    assert events == [{"type": "tool_call", "id": "call_ollama", "name": "file_read", "arguments": '{"path": "/tmp/a.txt"}'}]
+    assert events == [
+        {
+            "type": "tool_call",
+            "id": "call_ollama",
+            "name": "file_read",
+            "arguments": '{"path": "/tmp/a.txt"}',
+        }
+    ]
 
     parser.reset()
-    assert parser.feed({"tool_calls": [{"index": 0, "id": "call_vllm", "function": {"name": "file_", "arguments": None}}]}) == []
-    assert parser.feed({"tool_calls": [{"index": 0, "function": {"name": "write", "arguments": '{"path": "'}}]}) == []
-    events = parser.feed({"tool_calls": [{"index": 0, "function": {"arguments": '/tmp/a.txt", "content": "ok"}'}}]})
+    assert (
+        parser.feed(
+            {
+                "tool_calls": [
+                    {
+                        "index": 0,
+                        "id": "call_vllm",
+                        "function": {"name": "file_", "arguments": None},
+                    }
+                ]
+            }
+        )
+        == []
+    )
+    assert (
+        parser.feed(
+            {
+                "tool_calls": [
+                    {
+                        "index": 0,
+                        "function": {"name": "write", "arguments": '{"path": "'},
+                    }
+                ]
+            }
+        )
+        == []
+    )
+    events = parser.feed(
+        {
+            "tool_calls": [
+                {"index": 0, "function": {"arguments": '/tmp/a.txt", "content": "ok"}'}}
+            ]
+        }
+    )
     assert events == [
         {
             "type": "tool_call",
@@ -195,19 +244,31 @@ def _run_inline_tests() -> None:
     ]
 
     parser.reset()
-    assert parser.feed({"content": "Let me check. "}) == [{"type": "text", "content": "Let me check. "}]
+    assert parser.feed({"content": "Let me check. "}) == [
+        {"type": "text", "content": "Let me check. "}
+    ]
     events = parser.feed(
         {
             "tool_calls": [
                 {
                     "index": 0,
                     "id": "call_mixed",
-                    "function": {"name": "web_fetch", "arguments": '{"url": "https://example.com/a|b"}'},
+                    "function": {
+                        "name": "web_fetch",
+                        "arguments": '{"url": "https://example.com/a|b"}',
+                    },
                 }
             ]
         }
     )
-    assert events == [{"type": "tool_call", "id": "call_mixed", "name": "web_fetch", "arguments": '{"url": "https://example.com/a|b"}'}]
+    assert events == [
+        {
+            "type": "tool_call",
+            "id": "call_mixed",
+            "name": "web_fetch",
+            "arguments": '{"url": "https://example.com/a|b"}',
+        }
+    ]
 
     print("StreamingResponseParser inline tests passed.")
 

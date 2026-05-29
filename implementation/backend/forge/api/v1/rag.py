@@ -28,7 +28,9 @@ async def ingest_file(request: IngestFileRequest, _key: str = Depends(verify_api
 
 
 @router.post("/ingest/directory")
-async def ingest_directory(request: IngestDirectoryRequest, _key: str = Depends(verify_api_key)):
+async def ingest_directory(
+    request: IngestDirectoryRequest, _key: str = Depends(verify_api_key)
+):
     return await rag_service.ingest_directory(request.dir_path, request.pattern)
 
 
@@ -38,5 +40,7 @@ async def search(q: str, top_k: int = 5, _key: str = Depends(verify_api_key)):
 
 
 @router.delete("/document")
-async def delete_document(request: DeleteDocumentRequest, _key: str = Depends(verify_api_key)):
+async def delete_document(
+    request: DeleteDocumentRequest, _key: str = Depends(verify_api_key)
+):
     return await rag_service.delete_from_index(request.filename)

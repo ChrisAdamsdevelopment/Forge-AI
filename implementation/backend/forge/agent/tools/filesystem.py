@@ -21,7 +21,9 @@ def _build_allowed_roots() -> list[str]:
         logger.warning("Could not resolve user home directory: %s", exc)
 
     fallback = "C:\\" if os.name == "nt" else "/"
-    logger.warning("Falling back to broad filesystem root for ALLOWED_ROOTS: %s", fallback)
+    logger.warning(
+        "Falling back to broad filesystem root for ALLOWED_ROOTS: %s", fallback
+    )
     return [fallback]
 
 
@@ -58,7 +60,11 @@ async def file_write(path: str, content: str) -> dict[str, str | int]:
     file_path = _ensure_allowed(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(content, encoding="utf-8")
-    return {"status": "ok", "path": str(file_path), "bytes_written": len(content.encode("utf-8"))}
+    return {
+        "status": "ok",
+        "path": str(file_path),
+        "bytes_written": len(content.encode("utf-8")),
+    }
 
 
 async def file_delete(path: str) -> dict[str, str]:

@@ -22,7 +22,14 @@ def _markdown_sections(text: str) -> list[dict]:
 
     # preface before first heading
     if matches[0].start() > 0:
-        sections.append({"heading_path": [], "start": 0, "end": matches[0].start(), "text": text[: matches[0].start()]})
+        sections.append(
+            {
+                "heading_path": [],
+                "start": 0,
+                "end": matches[0].start(),
+                "text": text[: matches[0].start()],
+            }
+        )
 
     stack: list[str] = []
     levels: list[int] = []
@@ -37,12 +44,21 @@ def _markdown_sections(text: str) -> list[dict]:
 
         start = match.start()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        sections.append({"heading_path": list(stack), "start": start, "end": end, "text": text[start:end]})
+        sections.append(
+            {
+                "heading_path": list(stack),
+                "start": start,
+                "end": end,
+                "text": text[start:end],
+            }
+        )
 
     return sections
 
 
-def _split_with_overlap(text: str, base_offset: int, target: int, overlap: int) -> list[tuple[int, int, str]]:
+def _split_with_overlap(
+    text: str, base_offset: int, target: int, overlap: int
+) -> list[tuple[int, int, str]]:
     cleaned = text.strip()
     if not cleaned:
         return []
@@ -75,13 +91,19 @@ def chunk_text_content(
     chunk_overlap_chars: int = 120,
 ) -> list[RagChunk]:
     suffix = Path(source_path).suffix.lower()
-    sections = _markdown_sections(text) if suffix in {".md", ".markdown"} else [{"heading_path": [], "start": 0, "end": len(text), "text": text}]
+    sections = (
+        _markdown_sections(text)
+        if suffix in {".md", ".markdown"}
+        else [{"heading_path": [], "start": 0, "end": len(text), "text": text}]
+    )
 
     chunks: list[RagChunk] = []
     document_id = _sha256(source_path)[:16]
 
     for section in sections:
-        spans = _split_with_overlap(section["text"], section["start"], chunk_target_chars, chunk_overlap_chars)
+        spans = _split_with_overlap(
+            section["text"], section["start"], chunk_target_chars, chunk_overlap_chars
+        )
         for start, end, chunk_text in spans:
             if len(chunk_text.strip()) < chunk_min_chars and chunks:
                 # merge small tail chunks into previous chunk for stability
@@ -89,7 +111,9 @@ def chunk_text_content(
                 prev.text = f"{prev.text}\n\n{chunk_text}".strip()
                 prev.char_end = end
                 prev.content_hash = _sha256(prev.text)
-                prev.chunk_id = _sha256(f"{source_path}:{prev.chunk_index}:{prev.content_hash}")[:24]
+                prev.chunk_id = _sha256(
+                    f"{source_path}:{prev.chunk_index}:{prev.content_hash}"
+                )[:24]
                 continue
             content_hash = _sha256(chunk_text)
             chunk_index = len(chunks)

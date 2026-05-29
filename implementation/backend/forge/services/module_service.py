@@ -4,6 +4,7 @@ forge/services/module_service.py
 HTTP-facing service layer wrapping ModuleRunner.
 Keeps the FastAPI routes thin and the business logic testable.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

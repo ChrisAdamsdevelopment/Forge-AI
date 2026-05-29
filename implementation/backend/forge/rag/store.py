@@ -6,7 +6,9 @@ from forge.rag.schemas import RagChunk, RagDocument
 
 
 class RagStore(Protocol):
-    def upsert_document(self, document: RagDocument, chunks: list[RagChunk]) -> None: ...
+    def upsert_document(
+        self, document: RagDocument, chunks: list[RagChunk]
+    ) -> None: ...
 
     def get_document(self, document_id: str) -> RagDocument | None: ...
 

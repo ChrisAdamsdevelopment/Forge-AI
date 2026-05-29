@@ -39,14 +39,22 @@ async def rag_search(query: str, top_k: int = 5) -> dict:
     return await rag_service.search(query=query, top_k=top_k)
 
 
-
 def _is_public_tool_function(obj: Any, module_name: str) -> bool:
-    return inspect.isfunction(obj) and obj.__module__ == module_name and not obj.__name__.startswith("_")
+    return (
+        inspect.isfunction(obj)
+        and obj.__module__ == module_name
+        and not obj.__name__.startswith("_")
+    )
 
 
 def register_tools() -> None:
-    mcp.tool(name="rag_ingest_file", description="Ingest a local file into the Forge RAG index.")(rag_ingest_file)
-    mcp.tool(name="rag_search", description="Search the Forge RAG index for relevant chunks.")(rag_search)
+    mcp.tool(
+        name="rag_ingest_file",
+        description="Ingest a local file into the Forge RAG index.",
+    )(rag_ingest_file)
+    mcp.tool(
+        name="rag_search", description="Search the Forge RAG index for relevant chunks."
+    )(rag_search)
     for module_name in TOOL_MODULES:
         try:
             module = importlib.import_module(module_name)
@@ -54,11 +62,15 @@ def register_tools() -> None:
             MISSING_MODULES.append(module_name)
             continue
 
-        for _, fn in inspect.getmembers(module, lambda o: _is_public_tool_function(o, module_name)):
+        for _, fn in inspect.getmembers(
+            module, lambda o: _is_public_tool_function(o, module_name)
+        ):
             if not inspect.iscoroutinefunction(fn):
                 NON_ASYNC_FUNCTIONS.append(f"{module_name}.{fn.__name__}")
                 continue
-            mcp.tool(name=fn.__name__, description=(inspect.getdoc(fn) or "").strip())(fn)
+            mcp.tool(name=fn.__name__, description=(inspect.getdoc(fn) or "").strip())(
+                fn
+            )
             REGISTERED_TOOLS.append(
                 {
                     "name": fn.__name__,
@@ -78,9 +90,13 @@ async def dashboard_handler(_: web.Request) -> web.Response:
         "missing_modules": MISSING_MODULES,
         "non_async_functions": NON_ASYNC_FUNCTIONS,
     }
-    tools_html = "".join(
-        f"<li><code>{t['name']}{t['signature']}</code> <small>({t['module']})</small></li>" for t in REGISTERED_TOOLS
-    ) or "<li>No tools discovered yet.</li>"
+    tools_html = (
+        "".join(
+            f"<li><code>{t['name']}{t['signature']}</code> <small>({t['module']})</small></li>"
+            for t in REGISTERED_TOOLS
+        )
+        or "<li>No tools discovered yet.</li>"
+    )
     html = f"""
     <html>
       <head><title>Forge MCP Dashboard</title></head>

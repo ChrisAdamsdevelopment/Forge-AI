@@ -20,7 +20,14 @@ class RagService:
 
         db = await init_db()
         await create_table(db, TABLE_NAME)
-        await index_document(db, TABLE_NAME, chunks, embeddings, filename=path.name, metadata={"path": str(path)})
+        await index_document(
+            db,
+            TABLE_NAME,
+            chunks,
+            embeddings,
+            filename=path.name,
+            metadata={"path": str(path)},
+        )
 
         return {"filename": path.name, "chunks_count": len(chunks), "status": "indexed"}
 
@@ -30,17 +37,26 @@ class RagService:
         for file in base.glob(pattern):
             if file.is_file():
                 results.append(await self.ingest_file(str(file)))
-        return {"dir_path": str(base), "pattern": pattern, "results": results, "status": "ok"}
+        return {
+            "dir_path": str(base),
+            "pattern": pattern,
+            "results": results,
+            "status": "ok",
+        }
 
     async def search(self, query: str, top_k: int = 5) -> dict:
         db = await init_db()
         query_embedding = await embed_query(query)
-        candidates = await retrieve(db, TABLE_NAME, query_embedding=query_embedding, top_k=max(top_k * 4, 20))
+        candidates = await retrieve(
+            db, TABLE_NAME, query_embedding=query_embedding, top_k=max(top_k * 4, 20)
+        )
         ranked = await rerank(query, candidates, top_k=top_k)
 
         context_parts = []
         for chunk in ranked:
-            context_parts.append(f"[DOC: {chunk.get('filename', 'unknown')}] {chunk.get('content', '')}\n\n---")
+            context_parts.append(
+                f"[DOC: {chunk.get('filename', 'unknown')}] {chunk.get('content', '')}\n\n---"
+            )
 
         return {
             "query": query,
