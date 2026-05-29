@@ -8,8 +8,6 @@ All tools enforce least-privilege ACLs on the router side.
 from __future__ import annotations
 
 import asyncio
-import json
-import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -22,15 +20,16 @@ from fastmcp import FastMCP
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from forge.config import FASTAPI_PORT
 
 # Configuration
-ROUTER_HOST = "192.168.1.1"
-ROUTER_PORT = 80
+import os as _os
+
+ROUTER_HOST = _os.environ.get("ROUTER_HOST", "192.168.1.1")
+ROUTER_PORT = int(_os.environ.get("ROUTER_PORT", "80"))
 ROUTER_ENDPOINT = f"http://{ROUTER_HOST}:{ROUTER_PORT}/ubus"
-ROUTER_USERNAME = "root"
-ROUTER_PASSWORD = None  # Set via environment or config
-ROUTER_MCP_PORT = 8002
+ROUTER_USERNAME = _os.environ.get("ROUTER_USERNAME", "root")
+ROUTER_PASSWORD = _os.environ.get("ROUTER_PASSWORD", None)
+ROUTER_MCP_PORT = int(_os.environ.get("ROUTER_MCP_PORT", "8002"))
 REQUEST_TIMEOUT = 30.0
 
 # UBUS JSON-RPC constants
@@ -216,7 +215,7 @@ conn_mgr = ConnectionManager(password=ROUTER_PASSWORD)
 # ============================================================================
 
 
-@mcp.tool(description="Get router system information: board name, firmware, uptime, CPU load.", readOnlyHint=True)
+@mcp.tool(description="Get router system information: board name, firmware, uptime, CPU load.", annotations={"readOnlyHint": True})
 async def router_system_info() -> dict[str, Any]:
     """Retrieve system information from the router.
     
@@ -248,7 +247,7 @@ async def router_system_info() -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="List all network interfaces with current status (up/down) and IP addresses.", readOnlyHint=True)
+@mcp.tool(description="List all network interfaces with current status (up/down) and IP addresses.", annotations={"readOnlyHint": True})
 async def router_network_list() -> dict[str, Any]:
     """List all network interfaces on the router.
     
@@ -282,7 +281,7 @@ async def router_network_list() -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Get detailed status of a specific network interface.", readOnlyHint=True)
+@mcp.tool(description="Get detailed status of a specific network interface.", annotations={"readOnlyHint": True})
 async def router_interface_status(interface_name: str) -> dict[str, Any]:
     """Get detailed status of a specific network interface.
     
@@ -314,7 +313,7 @@ async def router_interface_status(interface_name: str) -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Perform a ping test from router to a target host.", readOnlyHint=True)
+@mcp.tool(description="Perform a ping test from router to a target host.", annotations={"readOnlyHint": True})
 async def router_ping_test(target: str, count: int = 4, timeout: int = 5) -> dict[str, Any]:
     """Ping a target host from the router.
     
@@ -346,7 +345,7 @@ async def router_ping_test(target: str, count: int = 4, timeout: int = 5) -> dic
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Scan for available WiFi networks (2.4GHz and 5GHz).", readOnlyHint=True)
+@mcp.tool(description="Scan for available WiFi networks (2.4GHz and 5GHz).", annotations={"readOnlyHint": True})
 async def router_wifi_scan(radio: str = "radio0") -> dict[str, Any]:
     """Scan for available WiFi networks.
     
@@ -376,7 +375,7 @@ async def router_wifi_scan(radio: str = "radio0") -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="List connected WiFi clients on the router.", readOnlyHint=True)
+@mcp.tool(description="List connected WiFi clients on the router.", annotations={"readOnlyHint": True})
 async def router_wifi_clients() -> dict[str, Any]:
     """List all connected WiFi clients.
     
@@ -405,7 +404,7 @@ async def router_wifi_clients() -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Get system logs (last N lines).", readOnlyHint=True)
+@mcp.tool(description="Get system logs (last N lines).", annotations={"readOnlyHint": True})
 async def router_system_logs(lines: int = 50) -> dict[str, Any]:
     """Retrieve recent system logs from the router.
     
@@ -427,7 +426,7 @@ async def router_system_logs(lines: int = 50) -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="Read UCI configuration value (network, wireless, firewall, etc.).", readOnlyHint=True)
+@mcp.tool(description="Read UCI configuration value (network, wireless, firewall, etc.).", annotations={"readOnlyHint": True})
 async def router_uci_get(config: str, section: str, option: str | None = None) -> dict[str, Any]:
     """Read a UCI configuration value.
     
@@ -450,7 +449,7 @@ async def router_uci_get(config: str, section: str, option: str | None = None) -
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="List all sections in a UCI configuration file.", readOnlyHint=True)
+@mcp.tool(description="List all sections in a UCI configuration file.", annotations={"readOnlyHint": True})
 async def router_uci_sections(config: str) -> dict[str, Any]:
     """List all sections in a UCI configuration file.
     
@@ -472,7 +471,7 @@ async def router_uci_sections(config: str) -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="Set a UCI configuration value with two-phase commit (set → validate → commit).", destructiveHint=True)
+@mcp.tool(description="Set a UCI configuration value with two-phase commit (set → validate → commit).", annotations={"destructiveHint": True})
 async def router_uci_set(config: str, section: str, option: str, value: str) -> dict[str, Any]:
     """Set a UCI configuration value with staged commit.
     
@@ -528,7 +527,7 @@ async def router_uci_set(config: str, section: str, option: str, value: str) -> 
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Revert uncommitted UCI changes for a configuration file.", destructiveHint=True)
+@mcp.tool(description="Revert uncommitted UCI changes for a configuration file.", annotations={"destructiveHint": True})
 async def router_uci_revert(config: str) -> dict[str, Any]:
     """Revert uncommitted UCI changes.
     
@@ -545,7 +544,7 @@ async def router_uci_revert(config: str) -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Restart a network interface (bring down and up).", destructiveHint=True)
+@mcp.tool(description="Restart a network interface (bring down and up).", annotations={"destructiveHint": True})
 async def router_interface_restart(interface_name: str) -> dict[str, Any]:
     """Restart a network interface.
     
@@ -562,7 +561,7 @@ async def router_interface_restart(interface_name: str) -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Add a firewall rule.", destructiveHint=True)
+@mcp.tool(description="Add a firewall rule.", annotations={"destructiveHint": True})
 async def router_firewall_rule_add(
     name: str,
     src_zone: str,
@@ -609,7 +608,7 @@ async def router_firewall_rule_add(
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Delete a firewall rule by name.", destructiveHint=True)
+@mcp.tool(description="Delete a firewall rule by name.", annotations={"destructiveHint": True})
 async def router_firewall_rule_delete(rule_name: str) -> dict[str, Any]:
     """Delete a firewall rule.
     
@@ -626,7 +625,7 @@ async def router_firewall_rule_delete(rule_name: str) -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="List all firewall rules and zones.", readOnlyHint=True)
+@mcp.tool(description="List all firewall rules and zones.", annotations={"readOnlyHint": True})
 async def router_firewall_rules() -> dict[str, Any]:
     """List all firewall rules and zones.
     
@@ -649,7 +648,7 @@ async def router_firewall_rules() -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="Reload a system service (dnsmasq, firewall, etc.).", destructiveHint=True)
+@mcp.tool(description="Reload a system service (dnsmasq, firewall, etc.).", annotations={"destructiveHint": True})
 async def router_service_reload(service: str) -> dict[str, Any]:
     """Reload (restart) a system service.
     
@@ -675,7 +674,7 @@ async def router_service_reload(service: str) -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="List installed packages on the router.", readOnlyHint=True)
+@mcp.tool(description="List installed packages on the router.", annotations={"readOnlyHint": True})
 async def router_packages_list(filter_name: str | None = None) -> dict[str, Any]:
     """List installed packages.
     
@@ -701,7 +700,7 @@ async def router_packages_list(filter_name: str | None = None) -> dict[str, Any]
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Search for a package in opkg repository.", readOnlyHint=True)
+@mcp.tool(description="Search for a package in opkg repository.", annotations={"readOnlyHint": True})
 async def router_packages_search(query: str) -> dict[str, Any]:
     """Search for packages in the repository.
     
@@ -722,7 +721,7 @@ async def router_packages_search(query: str) -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)}
 
 
-@mcp.tool(description="Install a package via opkg (network must be accessible).", destructiveHint=True)
+@mcp.tool(description="Install a package via opkg (network must be accessible).", annotations={"destructiveHint": True})
 async def router_package_install(package_name: str) -> dict[str, Any]:
     """Install a package.
     

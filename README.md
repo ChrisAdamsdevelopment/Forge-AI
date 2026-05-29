@@ -5,13 +5,13 @@ AI-driven control over their own machine — browser automation, terminal execut
 filesystem operations, screen capture, router orchestration, and autonomous security
 research — running entirely on local hardware with no cloud dependency.
 
-> **Dual-use notice:** Forge is designed for authorized, single-operator use on systems
-> you own or have explicit permission to test. The capabilities in this platform have
-> meaningful offensive potential. Read [SECURITY.md](SECURITY.md) before deploying.
+> **Warning:** This project provides powerful system automation capabilities. Use only on systems you own and control. Read [SECURITY.md](SECURITY.md) before deploying.
+
+Project governance and risk documents: [Security Policy](SECURITY.md), [Threat Model](THREAT_MODEL.md), [Contributing Guide](CONTRIBUTING.md), [License](LICENSE).
 
 ---
 
-## What It Does
+## What It Can Do
 
 | Capability | Implementation | Notes |
 |---|---|---|
@@ -50,17 +50,26 @@ ollama pull llama3
 
 ## Quick Start
 
+**Requirements:** Python 3.12, [Ollama](https://ollama.ai) running locally
+
 ```bash
 git clone https://github.com/ChrisAdamsdevelopment/Forge-AI.git
 cd Forge-AI
+
+# Install Python dependencies
 pip install -r implementation/backend/requirements.txt
+
+# Install Playwright browser (required for browser automation)
 playwright install chromium
+
+# Pull a local model
+ollama pull llama3
 ```
 
-**Configure your environment** (copy and edit):
+**Configure your environment:**
 ```bash
 cp .env.example .env
-# Edit .env: set FORGE_ALLOWED_ROOTS, NGROK_DOMAIN (if using ngrok)
+# Open .env and set FORGE_ALLOWED_ROOTS to the directories you want the agent to access
 ```
 
 **Start the agent:**
@@ -72,9 +81,11 @@ start_agent.bat
 python implementation/backend/forge/main.py
 ```
 
-Access the web UI at `http://localhost:9147` (or your configured port).
+Access the web UI at `http://localhost:9147`
 
----
+> **Note:** The pentest server requires WSL2 with Ubuntu and pentest tools installed
+> (nmap, gobuster, whatweb). The router server requires an OpenWrt router.
+> Both are optional — core agent functionality works without them.
 
 ## Configuration
 
@@ -89,7 +100,7 @@ Forge reads configuration from environment variables. Key settings:
 | `ROUTER_PASSWORD` | *(unset)* | Router login password — set via env, never in source |
 | `PENTEST_WSL_DISTRO` | `Ubuntu` | WSL distro for pentest tools |
 
-See `docs/security_model.md` for the full security configuration reference.
+See [SECURITY.md](SECURITY.md) and [THREAT_MODEL.md](THREAT_MODEL.md) for deployment guidance and risk analysis.
 
 ---
 
@@ -113,9 +124,9 @@ User (browser / desktop app)
         │
         └─ Tool dispatch (FastMCP)
             ├─ browser_server.py    :8010
-            ├─ filesystem_server.py :8011
+            ├─ screen_server.py     :8011
             ├─ terminal_server.py   :8012
-            ├─ screen_server.py     :8013
+            ├─ filesystem_server.py :8013
             ├─ apps_server.py       :8014
             ├─ web_server.py        :8015
             ├─ memory_server.py     :8016

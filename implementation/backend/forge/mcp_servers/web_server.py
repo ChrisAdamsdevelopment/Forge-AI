@@ -19,7 +19,7 @@ from forge.mcp_servers.base import get_port
 mcp = FastMCP("Web Content Fetching Agent")
 
 
-@mcp.tool(description="Fetch and parse web content from a URL.", readOnlyHint=True)
+@mcp.tool(description="Fetch and parse web content from a URL.", annotations={"readOnlyHint": True})
 async def fetch_web_content(url: str, include_html: bool = False) -> dict:
     """Fetch web content.
     

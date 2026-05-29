@@ -19,7 +19,7 @@ from forge.mcp_servers.base import get_port
 mcp = FastMCP("Sequential Thinking Agent")
 
 
-@mcp.tool(description="Perform sequential reasoning and thinking steps.", readOnlyHint=True)
+@mcp.tool(description="Perform sequential reasoning and thinking steps.", annotations={"readOnlyHint": True})
 async def think_through(problem: str, steps: int = 5) -> dict:
     """Sequential thinking.
     

@@ -1,0 +1,11 @@
+# Pentest server (requires WSL2 + Ubuntu with nmap, gobuster, whatweb installed)
+# No additional Python packages required beyond core
+
+# Router server (requires OpenWrt router accessible on network)
+# No additional Python packages required beyond core
+
+# Desktop app (Electron — install via npm in apps/desktop/)
+# npm install
+
+# GPU inference (optional — Ollama handles this separately)
+# See: https://ollama.ai/download

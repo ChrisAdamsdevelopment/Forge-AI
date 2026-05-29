@@ -6,8 +6,7 @@ for split domain-specific MCP servers.
 
 from __future__ import annotations
 
-import asyncio
-from typing import Callable, Optional
+from typing import Callable
 
 from fastmcp import FastMCP
 

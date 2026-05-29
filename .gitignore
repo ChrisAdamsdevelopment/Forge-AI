@@ -1,24 +1,28 @@
-# Secrets — NEVER commit these
+# Environment secrets — never commit
 .env
-.forge/
-auth.key
-*.key
+.env.local
+.env.*.local
 
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
 .venv/
+.venv*/
 venv/
+*.egg-info/
 dist/
 build/
-*.egg-info/
-.ruff_cache/
-.mypy_cache/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Node
+# Forge runtime data
+.forge/
+
+# Node (desktop app)
 node_modules/
+apps/desktop/node_modules/
 .next/
 out/
 dist-electron/
@@ -26,10 +30,15 @@ dist-electron/
 # Eval results (generated, not source)
 eval/results/
 
-# IDE
+# Secrets and keys
+auth.key
+*.key
+
+# Editor
 .vscode/
 .idea/
 *.swp
+*.swo
 
 # OS
 .DS_Store
