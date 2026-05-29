@@ -11,6 +11,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff pytest
+      - run: pip install -r implementation/backend/requirements.txt
       - run: ruff check implementation/backend/forge/
       - run: ruff format --check implementation/backend/forge/
       - run: pytest implementation/backend/tests
