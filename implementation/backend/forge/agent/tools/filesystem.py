@@ -39,7 +39,11 @@ async def file_write(path: str, content: str) -> dict[str, str | int]:
     file_path = _ensure_allowed(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(content, encoding="utf-8")
-    return {"status": "ok", "path": str(file_path), "bytes_written": len(content.encode("utf-8"))}
+    return {
+        "status": "ok",
+        "path": str(file_path),
+        "bytes_written": len(content.encode("utf-8")),
+    }
 
 
 async def file_delete(path: str) -> dict[str, str]:

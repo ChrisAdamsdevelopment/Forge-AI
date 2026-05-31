@@ -58,7 +58,9 @@ def _env_int(name: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError:
-        logger.warning("Invalid integer for %s=%r; using default %d", name, raw, default)
+        logger.warning(
+            "Invalid integer for %s=%r; using default %d", name, raw, default
+        )
         return default
 
 
@@ -133,13 +135,22 @@ def _require(pattern: re.Pattern[str], value: str, field_name: str) -> str:
 
 def _require_in(allowed: frozenset[str], value: str, field_name: str) -> str:
     if value not in allowed:
-        raise ValidationError(f"Invalid {field_name}: {value!r} (allowed: {sorted(allowed)})")
+        raise ValidationError(
+            f"Invalid {field_name}: {value!r} (allowed: {sorted(allowed)})"
+        )
     return value
 
 
 def _require_int_range(value: int, low: int, high: int, field_name: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < low or value > high:
-        raise ValidationError(f"{field_name} must be int in [{low},{high}], got {value!r}")
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < low
+        or value > high
+    ):
+        raise ValidationError(
+            f"{field_name} must be int in [{low},{high}], got {value!r}"
+        )
     return value
 
 
@@ -152,7 +163,10 @@ def _require_host(value: str, field_name: str = "target") -> str:
     except ValueError:
         pass
     # Hostname: RFC 1123 label, no shell metacharacters.
-    if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*", value):
+    if not re.fullmatch(
+        r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*",
+        value,
+    ):
         raise ValidationError(f"Invalid {field_name}: {value!r}")
     return value
 
@@ -181,7 +195,9 @@ class UbusError(RuntimeError):
 
     def __init__(self, status: int, message: str | None = None) -> None:
         self.status = status
-        super().__init__(message or STATUS_MESSAGES.get(status, f"ubus status {status}"))
+        super().__init__(
+            message or STATUS_MESSAGES.get(status, f"ubus status {status}")
+        )
 
 
 class UbusPermissionError(PermissionError):
@@ -267,19 +283,27 @@ class ConnectionManager:
 
         result = data.get("result")
         if not isinstance(result, list) or not result:
-            raise UbusError(UBUS_STATUS_UNKNOWN_ERROR, f"malformed login response: {data!r}")
+            raise UbusError(
+                UBUS_STATUS_UNKNOWN_ERROR, f"malformed login response: {data!r}"
+            )
 
         status = result[0]
         if status != UBUS_STATUS_OK:
-            raise UbusError(status, f"login failed: {STATUS_MESSAGES.get(status, status)}")
+            raise UbusError(
+                status, f"login failed: {STATUS_MESSAGES.get(status, status)}"
+            )
 
         body = result[1] if len(result) > 1 else {}
         if not isinstance(body, dict):
-            raise UbusError(UBUS_STATUS_UNKNOWN_ERROR, "login result missing session body")
+            raise UbusError(
+                UBUS_STATUS_UNKNOWN_ERROR, "login result missing session body"
+            )
 
         token = body.get("ubus_rpc_session")
         if not isinstance(token, str) or len(token) != 32:
-            raise UbusError(UBUS_STATUS_UNKNOWN_ERROR, "login result missing ubus_rpc_session")
+            raise UbusError(
+                UBUS_STATUS_UNKNOWN_ERROR, "login result missing ubus_rpc_session"
+            )
 
         timeout_s = body.get("timeout")
         if not isinstance(timeout_s, int) or timeout_s <= 0:
@@ -293,7 +317,9 @@ class ConnectionManager:
         async with self._lock:
             if not force and self._session_token and self._token_expiry:
                 # Refresh five minutes before the router will drop us.
-                if datetime.now(timezone.utc) < self._token_expiry - timedelta(minutes=5):
+                if datetime.now(timezone.utc) < self._token_expiry - timedelta(
+                    minutes=5
+                ):
                     return self._session_token
             return await self._login()
 
@@ -322,7 +348,8 @@ class ConnectionManager:
             result = data.get("result")
             if not isinstance(result, list) or not result:
                 raise UbusError(
-                    UBUS_STATUS_UNKNOWN_ERROR, f"malformed response for {namespace}.{method}"
+                    UBUS_STATUS_UNKNOWN_ERROR,
+                    f"malformed response for {namespace}.{method}",
                 )
 
             status = result[0]
@@ -332,7 +359,11 @@ class ConnectionManager:
 
             if status == UBUS_STATUS_PERMISSION_DENIED and attempts_left > 0:
                 # Could be expired session — drop the token and retry once.
-                logger.info("ubus permission denied for %s.%s; re-authenticating", namespace, method)
+                logger.info(
+                    "ubus permission denied for %s.%s; re-authenticating",
+                    namespace,
+                    method,
+                )
                 self._session_token = None
                 self._token_expiry = None
                 force_login = True
@@ -341,7 +372,9 @@ class ConnectionManager:
             if status == UBUS_STATUS_PERMISSION_DENIED:
                 raise UbusPermissionError(f"{namespace}.{method}: permission denied")
 
-            raise UbusError(status, f"{namespace}.{method}: {STATUS_MESSAGES.get(status, status)}")
+            raise UbusError(
+                status, f"{namespace}.{method}: {STATUS_MESSAGES.get(status, status)}"
+            )
 
         # Unreachable: loop either returns or raises.
         raise UbusError(UBUS_STATUS_UNKNOWN_ERROR, "exhausted retries")
@@ -413,7 +446,9 @@ def _handle(exc: Exception) -> dict[str, Any]:
     if isinstance(exc, UbusPermissionError):
         return _error_response(ERR_PERMISSION_DENIED, str(exc))
     if isinstance(exc, UbusError):
-        return _error_response(_map_ubus_status(exc.status), str(exc), ubus_status=exc.status)
+        return _error_response(
+            _map_ubus_status(exc.status), str(exc), ubus_status=exc.status
+        )
     return _error_response(ERR_TRANSPORT, f"{type(exc).__name__}: {exc}")
 
 
@@ -422,7 +457,9 @@ def _handle(exc: Exception) -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="Get router system information: board name, firmware, uptime, CPU load.")
+@mcp.tool(
+    description="Get router system information: board name, firmware, uptime, CPU load."
+)
 async def router_system_info() -> dict[str, Any]:
     try:
         info = await _conn().call("system", "info")
@@ -446,7 +483,9 @@ async def router_system_info() -> dict[str, Any]:
         return _handle(exc)
 
 
-@mcp.tool(description="List all network interfaces with up/down status and IP addresses.")
+@mcp.tool(
+    description="List all network interfaces with up/down status and IP addresses."
+)
 async def router_network_list() -> dict[str, Any]:
     try:
         dump = await _conn().call("network.interface", "dump")
@@ -620,7 +659,9 @@ async def router_system_logs(lines: int = 50) -> dict[str, Any]:
 # ============================================================================
 
 
-@mcp.tool(description="Read a UCI configuration value (entire section or single option).")
+@mcp.tool(
+    description="Read a UCI configuration value (entire section or single option)."
+)
 async def router_uci_get(
     config: str, section: str, option: str | None = None
 ) -> dict[str, Any]:
@@ -744,7 +785,9 @@ async def router_uci_commit(
             }
 
         commit_id = f"commit-{next(_commit_id_counter)}"
-        revert_at = datetime.now(timezone.utc) + timedelta(seconds=confirm_timeout_seconds)
+        revert_at = datetime.now(timezone.utc) + timedelta(
+            seconds=confirm_timeout_seconds
+        )
         task = asyncio.create_task(
             _schedule_auto_revert(_conn(), commit_id, config, confirm_timeout_seconds)
         )
@@ -815,7 +858,9 @@ async def router_interface_restart(interface_name: str) -> dict[str, Any]:
         return _handle(exc)
 
 
-@mcp.tool(description="Add a firewall rule via UCI (stages; commit firewall separately).")
+@mcp.tool(
+    description="Add a firewall rule via UCI (stages; commit firewall separately)."
+)
 async def router_firewall_rule_add(
     name: str,
     src_zone: str,
@@ -843,7 +888,9 @@ async def router_firewall_rule_add(
 
         # Use UCI add+set rather than the LuCI namespace (which is not part of
         # core rpcd and is gated by additional ACLs).
-        added = await _conn().call("uci", "add", {"config": "firewall", "type": "rule", "name": name})
+        added = await _conn().call(
+            "uci", "add", {"config": "firewall", "type": "rule", "name": name}
+        )
         section = added.get("section") or name
         await _conn().call(
             "uci",
@@ -891,9 +938,27 @@ async def router_firewall_rules() -> dict[str, Any]:
                     continue
                 stype = section.get(".type")
                 if stype == "zone":
-                    zones.append({"name": name, **{k: v for k, v in section.items() if not k.startswith(".")}})
+                    zones.append(
+                        {
+                            "name": name,
+                            **{
+                                k: v
+                                for k, v in section.items()
+                                if not k.startswith(".")
+                            },
+                        }
+                    )
                 elif stype == "rule":
-                    rules.append({"name": name, **{k: v for k, v in section.items() if not k.startswith(".")}})
+                    rules.append(
+                        {
+                            "name": name,
+                            **{
+                                k: v
+                                for k, v in section.items()
+                                if not k.startswith(".")
+                            },
+                        }
+                    )
         return {"status": "ok", "zones": zones, "rules": rules}
     except Exception as exc:  # noqa: BLE001
         return _handle(exc)
@@ -903,7 +968,9 @@ async def router_firewall_rules() -> dict[str, Any]:
 async def router_service_reload(service: str) -> dict[str, Any]:
     try:
         _require(_SERVICE_NAME_RE, service, "service")
-        await _conn().call("service", "event", {"type": "reload", "data": {"name": service}})
+        await _conn().call(
+            "service", "event", {"type": "reload", "data": {"name": service}}
+        )
         return {"status": "ok", "service": service, "reloaded": True}
     except Exception as exc:  # noqa: BLE001
         return _handle(exc)
@@ -929,7 +996,9 @@ async def router_packages_list(
         packages = data.get("packages") or []
         if filter_name:
             packages = [
-                p for p in packages if filter_name.lower() in (p.get("name") or "").lower()
+                p
+                for p in packages
+                if filter_name.lower() in (p.get("name") or "").lower()
             ]
         total = len(packages)
         window = packages[offset : offset + limit]
@@ -973,7 +1042,9 @@ async def router_package_install(package_name: str) -> dict[str, Any]:
 
 async def _serve() -> None:
     logger.info("Starting OpenWrt Router MCP server on port %d", ROUTER_MCP_PORT)
-    logger.info("Router endpoint: %s://%s:%d/ubus", ROUTER_SCHEME, ROUTER_HOST, ROUTER_PORT)
+    logger.info(
+        "Router endpoint: %s://%s:%d/ubus", ROUTER_SCHEME, ROUTER_HOST, ROUTER_PORT
+    )
     try:
         await mcp.run_async(transport="http", host="0.0.0.0", port=ROUTER_MCP_PORT)
     finally:

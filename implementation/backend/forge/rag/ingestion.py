@@ -26,7 +26,9 @@ def _hash_text(text: str) -> str:
 
 
 def _document_id(source_path: str, content_hash: str) -> str:
-    return hashlib.sha256(f"{source_path}:{content_hash}".encode("utf-8")).hexdigest()[:24]
+    return hashlib.sha256(f"{source_path}:{content_hash}".encode("utf-8")).hexdigest()[
+        :24
+    ]
 
 
 def discover_ingest_files(
@@ -56,13 +58,17 @@ def discover_ingest_files(
             continue
 
         if resolved.is_dir():
-            skipped.append({"path": str(candidate), "reason": "directory is not ingestible"})
+            skipped.append(
+                {"path": str(candidate), "reason": "directory is not ingestible"}
+            )
             continue
         if not resolved.exists():
             skipped.append({"path": str(candidate), "reason": "path does not exist"})
             continue
         if not resolved.is_file():
-            skipped.append({"path": str(candidate), "reason": "path is not a regular file"})
+            skipped.append(
+                {"path": str(candidate), "reason": "path is not a regular file"}
+            )
             continue
 
         ingest_set.add(resolved)
@@ -116,8 +122,10 @@ def ingest_documents(
                 source_path=rel_source,
                 title=document.title,
                 chunk_min_chars=chunk_min_chars or settings.rag_chunk_min_chars,
-                chunk_target_chars=chunk_target_chars or settings.rag_chunk_target_chars,
-                chunk_overlap_chars=chunk_overlap_chars or settings.rag_chunk_overlap_chars,
+                chunk_target_chars=chunk_target_chars
+                or settings.rag_chunk_target_chars,
+                chunk_overlap_chars=chunk_overlap_chars
+                or settings.rag_chunk_overlap_chars,
             )
             for chunk in chunks:
                 chunk.document_id = document_id
@@ -127,7 +135,9 @@ def ingest_documents(
             result.ingested_chunks += len(chunks)
             result.document_ids.append(document_id)
         except UnicodeDecodeError as exc:
-            result.skipped_paths.append({"path": rel_source, "reason": f"utf-8 decode error: {exc}"})
+            result.skipped_paths.append(
+                {"path": rel_source, "reason": f"utf-8 decode error: {exc}"}
+            )
         except Exception as exc:  # noqa: BLE001 - retain ingestion continuity
             result.failed_paths.append({"path": rel_source, "error": str(exc)})
 

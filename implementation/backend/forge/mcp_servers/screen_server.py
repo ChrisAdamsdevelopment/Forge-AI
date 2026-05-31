@@ -26,7 +26,9 @@ from forge.mcp_servers.base import get_port
 mcp = FastMCP("Screen Capture & Input Agent")
 
 
-@mcp.tool(description="Capture the current screen and return as base64.", readOnlyHint=True)
+@mcp.tool(
+    description="Capture the current screen and return as base64.", readOnlyHint=True
+)
 async def screen_shot() -> dict:
     """Capture screen."""
     return await screen_capture()
@@ -44,7 +46,9 @@ async def mouse_mv(x: int, y: int) -> dict:
     return await mouse_move(x, y)
 
 
-@mcp.tool(description="Click at coordinates with optional button.", destructiveHint=True)
+@mcp.tool(
+    description="Click at coordinates with optional button.", destructiveHint=True
+)
 async def mouse_btn_click(x: int, y: int, button: str = "left") -> dict:
     """Click mouse."""
     return await mouse_click(x, y, button)
@@ -56,7 +60,10 @@ async def keyboard_txt(text: str) -> dict:
     return await keyboard_type(text)
 
 
-@mcp.tool(description="Press a keyboard key (e.g., 'Enter', 'Tab', 'Escape').", destructiveHint=True)
+@mcp.tool(
+    description="Press a keyboard key (e.g., 'Enter', 'Tab', 'Escape').",
+    destructiveHint=True,
+)
 async def keyboard_key_press(key: str) -> dict:
     """Press key."""
     return await keyboard_press(key)

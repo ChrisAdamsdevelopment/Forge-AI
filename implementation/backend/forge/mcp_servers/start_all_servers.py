@@ -33,30 +33,30 @@ SERVERS = [
 def start_all_servers() -> None:
     """Start all MCP servers as subprocesses."""
     print_servers_info()
-    
+
     print(f"Starting {len(SERVERS)} MCP servers...\n")
-    
+
     processes = []
     for server_name in SERVERS:
         port = MCP_PORTS.get(server_name.replace("_server", ""))
         if not port:
             continue
-        
+
         print(f"  → Launching {server_name} on port {port}...")
-        
+
         # Launch as subprocess
         module_path = f"forge.mcp_servers.{server_name}"
         cmd = [sys.executable, "-m", module_path]
-        
+
         try:
             proc = subprocess.Popen(cmd)
             processes.append((server_name, proc))
         except Exception as exc:
             print(f"    ERROR: Failed to start {server_name}: {exc}")
-    
+
     print(f"\n✓ Started {len(processes)} servers\n")
     print("To stop all servers, press Ctrl+C or close this window.\n")
-    
+
     # Keep running
     try:
         for _, proc in processes:

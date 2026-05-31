@@ -28,7 +28,11 @@ def chunk_document(text: str, chunk_size: int = 512, overlap: int = 64) -> list[
     if not text:
         return []
 
-    sections = [s.strip() for s in _HEADER_SPLIT_RE.split(text) if s.strip()] if "#" in text else [text]
+    sections = (
+        [s.strip() for s in _HEADER_SPLIT_RE.split(text) if s.strip()]
+        if "#" in text
+        else [text]
+    )
     chunks: list[str] = []
     current = ""
 
@@ -54,12 +58,16 @@ def chunk_document(text: str, chunk_size: int = 512, overlap: int = 64) -> list[
             sentences = [s.strip() for s in _SENTENCE_SPLIT_RE.split(para) if s.strip()]
             sentence_buf = ""
             for sentence in sentences:
-                sentence_candidate = f"{sentence_buf} {sentence}".strip() if sentence_buf else sentence
+                sentence_candidate = (
+                    f"{sentence_buf} {sentence}".strip() if sentence_buf else sentence
+                )
                 if len(sentence_candidate) <= chunk_size:
                     sentence_buf = sentence_candidate
                 else:
                     if sentence_buf:
-                        chunks.extend(_split_long_text(sentence_buf, chunk_size, overlap))
+                        chunks.extend(
+                            _split_long_text(sentence_buf, chunk_size, overlap)
+                        )
                     if len(sentence) <= chunk_size:
                         sentence_buf = sentence
                     else:

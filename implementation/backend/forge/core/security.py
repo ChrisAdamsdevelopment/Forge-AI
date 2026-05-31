@@ -4,6 +4,7 @@ forge/core/security.py
 Local single-user authentication via a bearer token stored at ~/.forge/auth.key.
 No internet, no email, no third-party service required.
 """
+
 from __future__ import annotations
 
 from fastapi import HTTPException, Security, status

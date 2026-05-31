@@ -32,7 +32,9 @@ async def read_file(path: str) -> dict:
     return await file_read(path)
 
 
-@mcp.tool(description="Write text to a file (creates or overwrites).", destructiveHint=True)
+@mcp.tool(
+    description="Write text to a file (creates or overwrites).", destructiveHint=True
+)
 async def write_file(path: str, content: str) -> dict:
     """Write file."""
     return await file_write(path, content)

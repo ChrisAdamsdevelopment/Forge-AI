@@ -22,12 +22,12 @@ mcp = FastMCP("Memory Persistence Agent")
 @mcp.tool(description="Store data in persistent memory.", destructiveHint=True)
 async def store_memory(key: str, value: str, tags: list[str] | None = None) -> dict:
     """Store memory entry.
-    
+
     Args:
         key: Memory key
         value: Memory value
         tags: Optional tags for categorization
-        
+
     Returns:
         Dict with status and stored key
     """
@@ -37,10 +37,10 @@ async def store_memory(key: str, value: str, tags: list[str] | None = None) -> d
 @mcp.tool(description="Retrieve data from persistent memory.", readOnlyHint=True)
 async def retrieve_memory(key: str) -> dict:
     """Retrieve memory entry.
-    
+
     Args:
         key: Memory key to retrieve
-        
+
     Returns:
         Dict with status and value
     """

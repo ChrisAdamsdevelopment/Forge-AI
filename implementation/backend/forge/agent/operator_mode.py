@@ -36,7 +36,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(LOG_DIR / f"operator_mode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"),
+        logging.FileHandler(
+            LOG_DIR / f"operator_mode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        ),
         logging.StreamHandler(),
     ],
 )
@@ -185,19 +187,43 @@ Format as JSON array of {{tool_name, parameters, rationale}}"""
         """Heuristic-based attack planning when LLM is unavailable."""
         phase_steps = {
             PhaseType.RECONNAISSANCE: [
-                {"tool_name": "recon_nmap_scan", "parameters": {"target": self.target, "scan_type": "quick"}},
+                {
+                    "tool_name": "recon_nmap_scan",
+                    "parameters": {"target": self.target, "scan_type": "quick"},
+                },
                 {"tool_name": "recon_whois", "parameters": {"target": self.target}},
-                {"tool_name": "recon_subdomain_enum", "parameters": {"domain": self.target}},
+                {
+                    "tool_name": "recon_subdomain_enum",
+                    "parameters": {"domain": self.target},
+                },
             ],
             PhaseType.ENUMERATION: [
-                {"tool_name": "recon_nmap_scan", "parameters": {"target": self.target, "scan_type": "service"}},
-                {"tool_name": "recon_web_tech", "parameters": {"url": f"http://{self.target}"}},
-                {"tool_name": "recon_dir_bruteforce", "parameters": {"url": f"http://{self.target}"}},
+                {
+                    "tool_name": "recon_nmap_scan",
+                    "parameters": {"target": self.target, "scan_type": "service"},
+                },
+                {
+                    "tool_name": "recon_web_tech",
+                    "parameters": {"url": f"http://{self.target}"},
+                },
+                {
+                    "tool_name": "recon_dir_bruteforce",
+                    "parameters": {"url": f"http://{self.target}"},
+                },
             ],
             PhaseType.VULNERABILITY_ANALYSIS: [
-                {"tool_name": "exploit_nuclei_scan", "parameters": {"target": self.target}},
-                {"tool_name": "exploit_search_sploit", "parameters": {"query": self.target}},
-                {"tool_name": "exploit_sqlmap_test", "parameters": {"url": f"http://{self.target}"}},
+                {
+                    "tool_name": "exploit_nuclei_scan",
+                    "parameters": {"target": self.target},
+                },
+                {
+                    "tool_name": "exploit_search_sploit",
+                    "parameters": {"query": self.target},
+                },
+                {
+                    "tool_name": "exploit_sqlmap_test",
+                    "parameters": {"url": f"http://{self.target}"},
+                },
             ],
         }
 
@@ -223,7 +249,8 @@ Format as JSON array of {{tool_name, parameters, rationale}}"""
         for step in candidates:
             score = (
                 len(step.findings) * 10  # Prefer steps with rich findings
-                + (1 if step.tool_type == ToolType.RECON else 0) * 5  # Prefer safe steps
+                + (1 if step.tool_type == ToolType.RECON else 0)
+                * 5  # Prefer safe steps
                 + random.random()  # Tie-breaking
             )
             scored.append((score, step))
@@ -312,14 +339,14 @@ Format as JSON array of {{tool_name, parameters, rationale}}"""
         if step.tool_type == ToolType.RECON:
             return True  # Auto-approve recon
 
-        logger.warning(f"\n{'='*70}")
+        logger.warning(f"\n{'=' * 70}")
         logger.warning("HUMAN-IN-THE-LOOP CHECKPOINT - APPROVAL REQUIRED")
-        logger.warning(f"{'='*70}")
+        logger.warning(f"{'=' * 70}")
         logger.warning(f"Tool: {step.tool_name}")
         logger.warning(f"Target: {self.target}")
         logger.warning(f"Parameters: {json.dumps(step.parameters, indent=2)}")
         logger.warning(f"Rationale: {step.rationale}")
-        logger.warning(f"{'='*70}\n")
+        logger.warning(f"{'=' * 70}\n")
 
         # In non-interactive mode, default to no (safe)
         response = input("Execute this step? (y/n): ").strip().lower()
@@ -349,7 +376,9 @@ Format as JSON array of {{tool_name, parameters, rationale}}"""
             logger.info(f"Entering phase: {phase.value}")
 
             steps_in_phase = 0
-            while steps_in_phase < self.max_steps and self.step_counter < self.max_steps:
+            while (
+                steps_in_phase < self.max_steps and self.step_counter < self.max_steps
+            ):
                 # Plan next steps
                 next_steps = await self._plan_next_steps()
 
@@ -361,7 +390,9 @@ Format as JSON array of {{tool_name, parameters, rationale}}"""
                     if not step.executed:
                         # Request approval for destructive tools
                         if step.tool_type != ToolType.RECON:
-                            step.human_approved = await self._request_human_approval(step)
+                            step.human_approved = await self._request_human_approval(
+                                step
+                            )
                             if not step.human_approved:
                                 logger.info(f"Step {step.step_id} rejected by user")
                                 continue
@@ -396,13 +427,17 @@ Format as JSON array of {{tool_name, parameters, rationale}}"""
             "timestamp": datetime.now().isoformat(),
             "total_steps": len(self.attack_graph),
             "findings_count": len(self.findings_summary),
-            "attack_graph": {sid: step.to_dict() for sid, step in self.attack_graph.items()},
+            "attack_graph": {
+                sid: step.to_dict() for sid, step in self.attack_graph.items()
+            },
             "summary_findings": self.findings_summary,
             "markdown_report": self._generate_markdown_report(),
         }
 
         # Save report
-        report_file = LOG_DIR / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        report_file = (
+            LOG_DIR / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        )
         report_file.write_text(json.dumps(report, indent=2))
         logger.info(f"Report saved to {report_file}")
 
