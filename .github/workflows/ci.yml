@@ -10,7 +10,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest
+      - run: pip install ruff pytest pytest-asyncio
       - run: pip install -r implementation/backend/requirements.txt
       - run: ruff check implementation/backend/forge/
       - run: ruff format --check implementation/backend/forge/
