@@ -20,7 +20,8 @@ mcp = FastMCP("RAG Retrieval Agent")
 
 
 @mcp.tool(
-    description="Ingest a local file into the Forge RAG index.", destructiveHint=True
+    description="Ingest a local file into the Forge RAG index.",
+    annotations={"destructiveHint": True},
 )
 async def ingest_rag_file(file_path: str) -> dict:
     """Ingest file to RAG index.
@@ -35,7 +36,8 @@ async def ingest_rag_file(file_path: str) -> dict:
 
 
 @mcp.tool(
-    description="Search the Forge RAG index for relevant chunks.", readOnlyHint=True
+    description="Search the Forge RAG index for relevant chunks.",
+    annotations={"readOnlyHint": True},
 )
 async def search_rag_index(query: str, top_k: int = 5) -> dict:
     """Search RAG index.

@@ -44,15 +44,24 @@ if __package__ is None or __package__ == "":
 logger = logging.getLogger(__name__)
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
+def _env_str(name: str, default: str | None, *aliases: str) -> str | None:
+    """Read ``name`` from the environment; fall back to ``aliases`` in order, then ``default``."""
+    for key in (name, *aliases):
+        value = os.environ.get(key)
+        if value is not None:
+            return value
+    return default
+
+
+def _env_bool(name: str, default: bool, *aliases: str) -> bool:
+    raw = _env_str(name, None, *aliases)
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name)
+def _env_int(name: str, default: int, *aliases: str) -> int:
+    raw = _env_str(name, None, *aliases)
     if raw is None:
         return default
     try:
@@ -64,14 +73,25 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-ROUTER_HOST = os.environ.get("FORGE_ROUTER_HOST", "192.168.1.1")
-ROUTER_PORT = _env_int("FORGE_ROUTER_PORT", 80)
-ROUTER_SCHEME = os.environ.get("FORGE_ROUTER_SCHEME", "http").lower()
-ROUTER_USERNAME = os.environ.get("FORGE_ROUTER_USERNAME", "mcp_ai_agent")
-ROUTER_PASSWORD = os.environ.get("FORGE_ROUTER_PASSWORD")
-ROUTER_VERIFY_TLS = _env_bool("FORGE_ROUTER_VERIFY_TLS", True)
-ROUTER_MCP_PORT = _env_int("FORGE_ROUTER_MCP_PORT", 8002)
-REQUEST_TIMEOUT = float(os.environ.get("FORGE_ROUTER_TIMEOUT", "30"))
+# Primary env names are FORGE_ROUTER_*; the bare ROUTER_* names are accepted
+# as fallback for compatibility with earlier configs that used them.
+ROUTER_HOST = (
+    _env_str("FORGE_ROUTER_HOST", "192.168.1.1", "ROUTER_HOST") or "192.168.1.1"
+)
+ROUTER_PORT = _env_int("FORGE_ROUTER_PORT", 80, "ROUTER_PORT")
+ROUTER_SCHEME = (
+    _env_str("FORGE_ROUTER_SCHEME", "http", "ROUTER_SCHEME") or "http"
+).lower()
+ROUTER_USERNAME = (
+    _env_str("FORGE_ROUTER_USERNAME", "mcp_ai_agent", "ROUTER_USERNAME")
+    or "mcp_ai_agent"
+)
+ROUTER_PASSWORD = _env_str("FORGE_ROUTER_PASSWORD", None, "ROUTER_PASSWORD")
+ROUTER_VERIFY_TLS = _env_bool("FORGE_ROUTER_VERIFY_TLS", True, "ROUTER_VERIFY_TLS")
+ROUTER_MCP_PORT = _env_int("FORGE_ROUTER_MCP_PORT", 8002, "ROUTER_MCP_PORT")
+REQUEST_TIMEOUT = float(
+    _env_str("FORGE_ROUTER_TIMEOUT", "30", "ROUTER_TIMEOUT") or "30"
+)
 
 # ubus status codes — these come from the OpenWrt project.
 UBUS_STATUS_OK = 0

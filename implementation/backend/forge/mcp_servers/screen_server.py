@@ -27,34 +27,43 @@ mcp = FastMCP("Screen Capture & Input Agent")
 
 
 @mcp.tool(
-    description="Capture the current screen and return as base64.", readOnlyHint=True
+    description="Capture the current screen and return as base64.",
+    annotations={"readOnlyHint": True},
 )
 async def screen_shot() -> dict:
     """Capture screen."""
     return await screen_capture()
 
 
-@mcp.tool(description="Get current mouse position as (x, y).", readOnlyHint=True)
+@mcp.tool(
+    description="Get current mouse position as (x, y).",
+    annotations={"readOnlyHint": True},
+)
 async def mouse_pos() -> dict:
     """Get mouse position."""
     return await mouse_position()
 
 
-@mcp.tool(description="Move mouse to coordinates.", destructiveHint=True)
+@mcp.tool(
+    description="Move mouse to coordinates.", annotations={"destructiveHint": True}
+)
 async def mouse_mv(x: int, y: int) -> dict:
     """Move mouse."""
     return await mouse_move(x, y)
 
 
 @mcp.tool(
-    description="Click at coordinates with optional button.", destructiveHint=True
+    description="Click at coordinates with optional button.",
+    annotations={"destructiveHint": True},
 )
 async def mouse_btn_click(x: int, y: int, button: str = "left") -> dict:
     """Click mouse."""
     return await mouse_click(x, y, button)
 
 
-@mcp.tool(description="Type text using keyboard.", destructiveHint=True)
+@mcp.tool(
+    description="Type text using keyboard.", annotations={"destructiveHint": True}
+)
 async def keyboard_txt(text: str) -> dict:
     """Type text."""
     return await keyboard_type(text)
@@ -62,7 +71,7 @@ async def keyboard_txt(text: str) -> dict:
 
 @mcp.tool(
     description="Press a keyboard key (e.g., 'Enter', 'Tab', 'Escape').",
-    destructiveHint=True,
+    annotations={"destructiveHint": True},
 )
 async def keyboard_key_press(key: str) -> dict:
     """Press key."""

@@ -21,7 +21,7 @@ mcp = FastMCP("Terminal Execution Agent")
 
 @mcp.tool(
     description="Execute a terminal command with optional shell and working directory.",
-    destructiveHint=True,
+    annotations={"destructiveHint": True},
 )
 async def run_terminal_cmd(
     command: str,

@@ -24,25 +24,36 @@ from forge.mcp_servers.base import get_port
 mcp = FastMCP("Browser Automation Agent")
 
 
-@mcp.tool(description="Navigate browser to the provided URL.", readOnlyHint=True)
+@mcp.tool(
+    description="Navigate browser to the provided URL.",
+    annotations={"readOnlyHint": True},
+)
 async def browser_nav(url: str) -> dict:
     """Navigate to URL."""
     return await browser_navigate(url)
 
 
-@mcp.tool(description="Capture a screenshot and return as base64.", readOnlyHint=True)
+@mcp.tool(
+    description="Capture a screenshot and return as base64.",
+    annotations={"readOnlyHint": True},
+)
 async def browser_snap() -> dict:
     """Take screenshot."""
     return await browser_screenshot()
 
 
-@mcp.tool(description="Click a page element using CSS selector.", destructiveHint=True)
+@mcp.tool(
+    description="Click a page element using CSS selector.",
+    annotations={"destructiveHint": True},
+)
 async def browser_btn_click(selector: str) -> dict:
     """Click element."""
     return await browser_click(selector)
 
 
-@mcp.tool(description="Type text into an input field.", destructiveHint=True)
+@mcp.tool(
+    description="Type text into an input field.", annotations={"destructiveHint": True}
+)
 async def browser_text_input(selector: str, text: str) -> dict:
     """Type text."""
     return await browser_type(selector, text)
