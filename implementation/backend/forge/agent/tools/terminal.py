@@ -19,8 +19,16 @@ def _shell_command(shell: str, command: str) -> Sequence[str]:
     raise ValueError(f"Unsupported shell: {shell}")
 
 
-async def terminal_execute(command: str, shell: str = "powershell", working_dir: str | None = None) -> dict[str, str | int]:
+async def terminal_execute(
+    command: str, shell: str = "powershell", working_dir: str | None = None
+) -> dict[str, str | int]:
     """Execute a terminal command with a 120-second timeout."""
     cmd = _shell_command(shell, command)
-    completed = subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=working_dir)
-    return {"exit_code": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr}
+    completed = subprocess.run(
+        cmd, capture_output=True, text=True, timeout=120, cwd=working_dir
+    )
+    return {
+        "exit_code": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }

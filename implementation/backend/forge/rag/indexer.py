@@ -12,14 +12,16 @@ DB_PATH = Path("~/.forge/lancedb").expanduser()
 
 
 def _schema() -> pa.Schema:
-    return pa.schema([
-        pa.field("id", pa.string()),
-        pa.field("content", pa.string()),
-        pa.field("embedding", pa.list_(pa.float32(), 1024)),
-        pa.field("metadata", pa.string()),
-        pa.field("filename", pa.string()),
-        pa.field("chunk_index", pa.int32()),
-    ])
+    return pa.schema(
+        [
+            pa.field("id", pa.string()),
+            pa.field("content", pa.string()),
+            pa.field("embedding", pa.list_(pa.float32(), 1024)),
+            pa.field("metadata", pa.string()),
+            pa.field("filename", pa.string()),
+            pa.field("chunk_index", pa.int32()),
+        ]
+    )
 
 
 async def init_db() -> lancedb.AsyncConnection:
@@ -34,21 +36,30 @@ async def create_table(db: lancedb.AsyncConnection, table_name: str):
     return await db.create_table(table_name, schema=_schema())
 
 
-async def index_document(db, table_name: str, chunks: list[str], embeddings: list[list[float]], filename: str, metadata: dict | None = None):
+async def index_document(
+    db,
+    table_name: str,
+    chunks: list[str],
+    embeddings: list[list[float]],
+    filename: str,
+    metadata: dict | None = None,
+):
     if len(chunks) != len(embeddings):
         raise ValueError("chunks and embeddings length mismatch")
     table = await create_table(db, table_name)
     metadata = metadata or {}
     rows: list[dict[str, Any]] = []
     for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
-        rows.append({
-            "id": str(uuid.uuid4()),
-            "content": chunk,
-            "embedding": [float(v) for v in emb],
-            "metadata": json.dumps(metadata),
-            "filename": filename,
-            "chunk_index": i,
-        })
+        rows.append(
+            {
+                "id": str(uuid.uuid4()),
+                "content": chunk,
+                "embedding": [float(v) for v in emb],
+                "metadata": json.dumps(metadata),
+                "filename": filename,
+                "chunk_index": i,
+            }
+        )
     if rows:
         await table.add(rows)
 

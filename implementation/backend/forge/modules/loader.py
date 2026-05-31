@@ -34,7 +34,9 @@ class ModuleLoader:
             manifests.append(manifest)
         return manifests
 
-    async def load_module(self, module_name: str, target: Any, force: bool = False) -> bool:
+    async def load_module(
+        self, module_name: str, target: Any, force: bool = False
+    ) -> bool:
         module_dir = self.modules_dir / module_name
         manifest_path = module_dir / "module.json"
         module_path = module_dir / "module.py"
@@ -50,7 +52,9 @@ class ModuleLoader:
         if not force and not manifest.get("enabled", False):
             return False
 
-        spec = importlib.util.spec_from_file_location(f"forge_dynamic_module_{module_name}", module_path)
+        spec = importlib.util.spec_from_file_location(
+            f"forge_dynamic_module_{module_name}", module_path
+        )
         if spec is None or spec.loader is None:
             return False
 
@@ -91,5 +95,7 @@ class ModuleLoader:
         except json.JSONDecodeError:
             return False
         manifest["enabled"] = enabled
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
         return True

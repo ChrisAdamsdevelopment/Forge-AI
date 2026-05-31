@@ -66,7 +66,11 @@ async def run_agent_loop(
     stream: bool = False,
 ) -> list[dict[str, Any]]:
     inference_service = inference or InferenceService()
-    state: dict[str, Any] = {"messages": list(session_messages), "rag_results": [], "model": model}
+    state: dict[str, Any] = {
+        "messages": list(session_messages),
+        "rag_results": [],
+        "model": model,
+    }
 
     started_at = time.monotonic()
     for _ in range(15):

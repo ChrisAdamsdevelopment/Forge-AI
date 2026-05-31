@@ -25,7 +25,9 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
     embeddings = data.get("embeddings") or []
     vectors: list[list[float]] = [[float(v) for v in emb] for emb in embeddings]
     if len(vectors) != len(texts):
-        raise ValueError(f"Embedding count mismatch: expected {len(texts)} got {len(vectors)}")
+        raise ValueError(
+            f"Embedding count mismatch: expected {len(texts)} got {len(vectors)}"
+        )
     return vectors
 
 

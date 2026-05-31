@@ -7,6 +7,7 @@ async def web_fetch(url: str, max_length: int = 5000) -> dict[str, str | int]:
     """Fetch URL content and return markdown-formatted text."""
     from bs4 import BeautifulSoup
     import html2text
+
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         response = await client.get(url)
     response.raise_for_status()

@@ -1,12 +1,33 @@
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
-ALLOWED_ROOTS = [
-    r"C:\Users\YourName",
-    r"D:\\",
-    r"\\wsl$\\Ubuntu\\home\\yourname",
-]
+logger = logging.getLogger(__name__)
+
+
+def _build_allowed_roots() -> list[str]:
+    """Build ALLOWED_ROOTS from environment or fall back to a safe local root."""
+    env_roots = os.environ.get("FORGE_ALLOWED_ROOTS", "")
+    if env_roots:
+        return [r.strip() for r in env_roots.split(":") if r.strip()]
+
+    try:
+        home = Path.home()
+        if str(home) and home.exists():
+            return [str(home)]
+    except RuntimeError as exc:
+        logger.warning("Could not resolve user home directory: %s", exc)
+
+    fallback = "C:\\" if os.name == "nt" else "/"
+    logger.warning(
+        "Falling back to broad filesystem root for ALLOWED_ROOTS: %s", fallback
+    )
+    return [fallback]
+
+
+ALLOWED_ROOTS = _build_allowed_roots()
 
 
 def _is_allowed(path: Path) -> bool:
@@ -39,7 +60,11 @@ async def file_write(path: str, content: str) -> dict[str, str | int]:
     file_path = _ensure_allowed(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(content, encoding="utf-8")
-    return {"status": "ok", "path": str(file_path), "bytes_written": len(content.encode("utf-8"))}
+    return {
+        "status": "ok",
+        "path": str(file_path),
+        "bytes_written": len(content.encode("utf-8")),
+    }
 
 
 async def file_delete(path: str) -> dict[str, str]:

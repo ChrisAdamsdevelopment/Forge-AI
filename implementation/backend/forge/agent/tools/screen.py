@@ -31,7 +31,9 @@ async def mouse_move(x: int, y: int) -> dict[str, int | str]:
     return {"status": "ok", "x": x, "y": y}
 
 
-async def mouse_click(x: int | None = None, y: int | None = None, button: str = "left") -> dict[str, int | str | None]:
+async def mouse_click(
+    x: int | None = None, y: int | None = None, button: str = "left"
+) -> dict[str, int | str | None]:
     """Click mouse at optional coordinates using the specified button."""
     import pyautogui
 

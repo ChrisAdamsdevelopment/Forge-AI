@@ -26,37 +26,53 @@ from forge.mcp_servers.base import get_port
 mcp = FastMCP("Filesystem Operations Agent")
 
 
-@mcp.tool(description="Read a file and return its contents.", readOnlyHint=True)
+@mcp.tool(
+    description="Read a file and return its contents.",
+    annotations={"readOnlyHint": True},
+)
 async def read_file(path: str) -> dict:
     """Read file."""
     return await file_read(path)
 
 
-@mcp.tool(description="Write text to a file (creates or overwrites).", destructiveHint=True)
+@mcp.tool(
+    description="Write text to a file (creates or overwrites).",
+    annotations={"destructiveHint": True},
+)
 async def write_file(path: str, content: str) -> dict:
     """Write file."""
     return await file_write(path, content)
 
 
-@mcp.tool(description="Delete a file or directory.", destructiveHint=True)
+@mcp.tool(
+    description="Delete a file or directory.", annotations={"destructiveHint": True}
+)
 async def delete_file(path: str) -> dict:
     """Delete file."""
     return await file_delete(path)
 
 
-@mcp.tool(description="List files and directories in a path.", readOnlyHint=True)
+@mcp.tool(
+    description="List files and directories in a path.",
+    annotations={"readOnlyHint": True},
+)
 async def list_files(path: str) -> dict:
     """List directory."""
     return await file_list(path)
 
 
-@mcp.tool(description="Search for files by name pattern.", readOnlyHint=True)
+@mcp.tool(
+    description="Search for files by name pattern.", annotations={"readOnlyHint": True}
+)
 async def search_files(pattern: str, directory: str = ".") -> dict:
     """Search files."""
-    return await file_search(pattern, directory)
+    return await file_search(directory, pattern)
 
 
-@mcp.tool(description="Create a directory and parents if needed.", destructiveHint=True)
+@mcp.tool(
+    description="Create a directory and parents if needed.",
+    annotations={"destructiveHint": True},
+)
 async def create_directory(path: str) -> dict:
     """Create directory."""
     return await file_mkdir(path)

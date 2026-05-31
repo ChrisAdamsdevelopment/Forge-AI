@@ -19,19 +19,22 @@ from forge.mcp_servers.base import get_port
 mcp = FastMCP("Terminal Execution Agent")
 
 
-@mcp.tool(description="Execute a terminal command with optional shell and working directory.", destructiveHint=True)
+@mcp.tool(
+    description="Execute a terminal command with optional shell and working directory.",
+    annotations={"destructiveHint": True},
+)
 async def run_terminal_cmd(
     command: str,
     shell: str = "powershell",
     working_dir: str | None = None,
 ) -> dict:
     """Execute terminal command.
-    
+
     Args:
         command: Command to execute
         shell: Shell to use (powershell, cmd, wsl, bash, gitbash)
         working_dir: Optional working directory
-        
+
     Returns:
         Dict with exit_code, stdout, stderr
     """

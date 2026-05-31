@@ -25,7 +25,9 @@ def resolve_knowledge_path(
     root = Path(knowledge_root).expanduser().resolve()
     requested = Path(requested_path).expanduser()
 
-    candidate = requested.resolve() if requested.is_absolute() else (root / requested).resolve()
+    candidate = (
+        requested.resolve() if requested.is_absolute() else (root / requested).resolve()
+    )
 
     try:
         candidate.relative_to(root)
@@ -34,6 +36,8 @@ def resolve_knowledge_path(
 
     allowed = normalize_allowed_extensions(list(allowed_extensions))
     if candidate.suffix.lower() not in allowed:
-        raise RagPathError(f"Disallowed extension for RAG ingestion: {candidate.suffix}")
+        raise RagPathError(
+            f"Disallowed extension for RAG ingestion: {candidate.suffix}"
+        )
 
     return candidate
