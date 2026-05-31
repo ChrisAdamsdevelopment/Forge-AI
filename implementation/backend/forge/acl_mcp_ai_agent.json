@@ -1,119 +1,33 @@
 {
   "mcp_ai_agent": {
-    "description": "Least-privilege MCP automation agent access",
+    "description": "Least-privilege ACL for the Forge router MCP agent. Deploy to /usr/share/rpcd/acl.d/ on the OpenWrt device and create a matching rpcd user (uci set rpcd.@login[?]=login; ...).",
     "read": {
-      "uci": [
-        "get",
-        "sections"
-      ],
-      "network": [
-        "interface"
-      ],
-      "network.interface": [
-        "status"
-      ],
-      "network.device": [
-        "status"
-      ],
-      "system": [
-        "info",
-        "board",
-        "logs"
-      ],
-      "iwinfo": [
-        "scan"
-      ],
-      "luci.network.firewall": [
-        "get_rules"
-      ],
-      "opkg": [
-        "list",
-        "search"
-      ],
-      "service": [
-        "list"
-      ]
+      "ubus": {
+        "session": ["access"],
+        "system": ["info", "board"],
+        "log": ["read"],
+        "network.interface": ["dump", "status"],
+        "network.device": ["status"],
+        "iwinfo": ["devices", "info", "scan", "assoclist"],
+        "uci": ["get", "changes"],
+        "opkg": ["list_installed", "find"],
+        "service": ["list"],
+        "file": ["stat"]
+      },
+      "uci": ["network", "wireless", "firewall", "dhcp", "system"]
     },
     "write": {
-      "uci": [
-        "set",
-        "commit",
-        "revert",
-        "changes"
-      ],
-      "network.interface": [
-        "restart"
-      ],
-      "luci.network.firewall": [
-        "add_rule",
-        "delete_rule"
-      ],
-      "service": [
-        "reload"
-      ],
-      "opkg": [
-        "install"
-      ]
-    },
-    "uci": {
-      "access": "read_write",
-      "whitelist": {
-        "network": [
-          "interface.*.ipaddr",
-          "interface.*.netmask",
-          "interface.*.proto",
-          "interface.*.type",
-          "route.*.target",
-          "route.*.gateway"
-        ],
-        "wireless": [
-          "device.*.hwmode",
-          "device.*.channel",
-          "interface.*.ssid",
-          "interface.*.key",
-          "interface.*.encryption"
-        ],
-        "firewall": [
-          "rule.*",
-          "zone.*.name",
-          "zone.*.input",
-          "zone.*.output",
-          "zone.*.forward"
-        ],
-        "dhcp": [
-          "dnsmasq.*.enabled",
-          "dnsmasq.*.rebind_protection",
-          "host.*"
-        ]
+      "ubus": {
+        "uci": ["set", "add", "delete", "commit", "revert"],
+        "network.interface": ["up", "down"],
+        "service": ["event"],
+        "opkg": ["install"],
+        "file": ["exec"]
       },
-      "deny": {
-        "system": [
-          "*"
-        ],
-        "admin": [
-          "*"
-        ]
+      "uci": ["network", "wireless", "firewall", "dhcp"],
+      "file": {
+        "/bin/ping": ["exec"]
       }
-    },
-    "filesystem": {
-      "access": "read_only",
-      "whitelist": [
-        "/mnt/usb/*"
-      ],
-      "deny": [
-        "/etc",
-        "/root",
-        "/sys",
-        "/proc",
-        "/dev",
-        "/boot",
-        "/lib"
-      ]
-    },
-    "limits": {
-      "timeout": 30,
-      "concurrent_sessions": 10,
-      "rate_limit": 100
     }
   }
 }
