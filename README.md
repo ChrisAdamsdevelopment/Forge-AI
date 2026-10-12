@@ -1,5 +1,7 @@
 # Forge AI
 
+**For engineering reviewers:** [Architecture, MCP/tool integration, local inference, RAG, testing and threat-model boundaries](docs/engineering-portfolio.md). This portfolio guide distinguishes inspectable implementation from optional tooling and unverified production claims.
+
 A local-first, self-hosted personal AI agent platform. Forge gives a single operator
 AI-driven control over their own machine — browser automation, terminal execution,
 filesystem operations, screen capture, router orchestration, and autonomous security
