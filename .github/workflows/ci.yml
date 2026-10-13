@@ -10,7 +10,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest pytest-asyncio
+      # Ruff 0.17 introduced new diagnostics not yet addressed in main.
+      # Pin the 0.15.14 baseline, then upgrade in a separate lint migration.
+      - run: pip install ruff==0.15.14 pytest pytest-asyncio
       - run: pip install -r implementation/backend/requirements.txt
       - run: ruff check implementation/backend/forge/
       - run: ruff format --check implementation/backend/forge/
