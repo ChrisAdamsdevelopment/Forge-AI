@@ -184,6 +184,10 @@ Read `CODEX_INSTRUCTIONS.md` for full workflow guidance.
 
 ---
 
+## Protected remote MCP diagnostics
+
+For an existing protected Windows MCP tunnel, use the [read-only ngrok/MCP connectivity test](scripts/Test-McpTunnel.ps1) and [recovery guide](docs/protected-local-mcp-tunnel.md). Anonymous HTTP 401 is expected; ChatGPT tool registration is a separate step. Do not expose Forge's unprotected MCP tool server directly to the public internet.
+
 ## Security
 
 This project has meaningful dual-use potential. Please read [SECURITY.md](SECURITY.md)

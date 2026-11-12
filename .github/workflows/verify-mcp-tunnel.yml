@@ -1,0 +1,37 @@
+name: Verify MCP tunnel PowerShell script
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/Test-McpTunnel.ps1'
+      - '.github/workflows/verify-mcp-tunnel.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/Test-McpTunnel.ps1'
+      - '.github/workflows/verify-mcp-tunnel.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  powershell-parse:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify PowerShell AST parses without errors
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path 'scripts/Test-McpTunnel.ps1').Path,
+              [ref]$tokens,
+              [ref]$parseErrors
+          )
+          if ($parseErrors.Count -ne 0) {
+              $parseErrors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+          }
+          Write-Host "PowerShell syntax check PASSED"
