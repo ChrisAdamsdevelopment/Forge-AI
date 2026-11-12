@@ -21,11 +21,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-McpTunnel
 The script verifies, in order:
 
 1. The named ngrok executable exists and reports a version of at least 3.29.0.
-2. Local http://127.0.0.1:8766/mcp responds with HTTP 401 without credentials.
-3. The local ngrok inspector at http://127.0.0.1:4040/api/tunnels reports exactly one tunnel for the specified origin, forwarding to port 8766.
-4. Public https://YOUR-RESERVED-DOMAIN.ngrok-free.dev/mcp also responds with HTTP 401 without credentials.
+2. The local listener is loopback-only, owned by the expected process (command line contains the default marker `local-workspace-mcp`). Customize `-ServerCommandMarker` if the actual known server uses a different executable or entrypoint.
+3. Local http://127.0.0.1:8766/mcp rejects **both anonymous GET and read-only MCP initialize POST** with HTTP 401; redirects are not followed.
+4. The local ngrok inspector at http://127.0.0.1:4040/api/tunnels reports one tunnel for the specified origin, forwarding to loopback port 8766.
+5. Public https://YOUR-RESERVED-DOMAIN.ngrok-free.dev/mcp rejects those same anonymous GET and initialize POST requests with 401.
+6. The inspector mapping remains unchanged after the public probe.
 
-Success ends with '[PASS] Network and protection checks completed.' Failure reports the layer and returns nonzero exit status.
+Success ends with '[PASS] Read-only transport/authentication probes completed.' Failure reports the layer and returns nonzero exit status. These probes do not authenticate an MCP tool client or prove that authorized tool execution works.
 
 ## Failure patterns
 
