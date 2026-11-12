@@ -77,12 +77,12 @@ function Get-VerifiedForward {
 
     # The ngrok inspection API is intentionally fixed to loopback.
     $inspection = Invoke-RestMethod -Uri $inspectorUrl -TimeoutSec 10 -MaximumRedirection 0
-    $matches = @($inspection.tunnels | Where-Object { $_.public_url -eq $ExpectedOrigin })
-    if ($matches.Count -ne 1) {
-        throw "Expected exactly one ngrok tunnel for $ExpectedOrigin, found $($matches.Count)."
+    $matchingTunnels = @($inspection.tunnels | Where-Object { $_.public_url -eq $ExpectedOrigin })
+    if ($matchingTunnels.Count -ne 1) {
+        throw "Expected exactly one ngrok tunnel for $ExpectedOrigin, found $($matchingTunnels.Count)."
     }
 
-    $address = [string]$matches[0].config.addr
+    $address = [string]$matchingTunnels[0].config.addr
     $forwardUri = $null
     if (-not [Uri]::TryCreate($address, [UriKind]::Absolute, [ref]$forwardUri) -or
         $forwardUri.Scheme -ne 'http' -or
